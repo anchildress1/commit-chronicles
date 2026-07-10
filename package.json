@@ -33,7 +33,6 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@checkmarkdevtools/commitlint-plugin-rai": "^0.1.6",
     "@cloudflare/vite-plugin": "^1.44.0",
     "@cloudflare/workers-types": "^5.20260710.1",
     "@commitlint/cli": "^21.2.1",
@@ -49,6 +48,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.10",
+    "commitlint-plugin-rai": "^1.0.1",
     "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react-hooks": "^7.1.1",

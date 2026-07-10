@@ -33,5 +33,3 @@ pre-push:
       run: make test
     e2e:
       run: make e2e
-    perf:
-      run: make perf

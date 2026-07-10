@@ -35,7 +35,7 @@ Canonical instruction source for this repository. Treat this file as authoritati
 - Never land directly on `main` — branch and PR always.
 - Include the required RAI footer identifying the model:
   ```
-  Generated-by: Claude Sonnet 5
+  Generated-by: <AI agent name and email>
   ```
 
 ## Project: Commit Chronicles
@@ -102,4 +102,4 @@ Run everything through `make` (delegates to pnpm):
 
 ## Documentation
 
-- Do not add docs to the project unless specifically asked.
+- Do not add docs to the project until specifically asked.

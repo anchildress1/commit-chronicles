@@ -1,0 +1,37 @@
+pre-commit:
+  parallel: false
+  commands:
+    format:
+      glob: '*.{ts,tsx,js,jsx,mjs,cjs,md,json,jsonc,yaml,yml,css,html}'
+      run: make format-files FILES="{staged_files}"
+      stage_fixed: true
+    lint:
+      run: make lint
+    scan-secrets:
+      run: make secret-scan
+    actionlint:
+      glob: '.github/workflows/*.{yml,yaml}'
+      run: |
+        if command -v actionlint > /dev/null; then
+          actionlint {staged_files}
+        else
+          echo "❌ actionlint not found. Install: brew install actionlint"
+          exit 1
+        fi
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: make typecheck
+    unit-tests:
+      run: make test
+    e2e:
+      run: make e2e
+    perf:
+      run: make perf

@@ -1,0 +1,15 @@
+# Approve build scripts only for trusted toolchain packages (esbuild/workerd power
+# the Vite + Wrangler build, sharp backs Lighthouse image handling, lefthook installs
+# the git hooks). Everything else stays sandboxed.
+allowBuilds:
+  esbuild: true
+  lefthook: true
+  sharp: true
+  workerd: true
+
+# Supply-chain cooldown exclusions (see .npmrc for the 7-day guard itself). These
+# publish faster than the cooldown window and are first-party/low-risk, so pnpm
+# allowed them through when the guard would otherwise block a required version.
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types@5.20260710.1'
+  - hono@4.12.29

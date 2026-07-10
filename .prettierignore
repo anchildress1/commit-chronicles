@@ -1,0 +1,10 @@
+dist
+coverage
+playwright-report
+test-results
+.wrangler
+pnpm-lock.yaml
+CHANGELOG.md
+
+# Historical design docs / specs — don't churn them with formatter reflows
+docs/

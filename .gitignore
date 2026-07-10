@@ -7,6 +7,25 @@ Thumbs.db
 .idea/
 *.swp
 
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test / coverage artifacts
+coverage/
+playwright-report/
+test-results/
+.lighthouseci/
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+worker-configuration.d.ts
+
 # Env
 .env
 .env.*

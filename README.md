@@ -4,6 +4,7 @@
 <!-- ![Banner](./docs/banner.png) -->
 
 [![CI](https://github.com/anchildress1/commit-chronicles/actions/workflows/ci.yml/badge.svg)](https://github.com/anchildress1/commit-chronicles/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/anchildress1/commit-chronicles/branch/main/graph/badge.svg)](https://codecov.io/gh/anchildress1/commit-chronicles)
 [![License: Polyform Shield](https://img.shields.io/badge/license-Polyform%20Shield-blue)](LICENSE)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=anchildress1_commit-chronicles&metric=alert_status)](https://sonarcloud.io/project/overview?id=anchildress1_commit-chronicles)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=anchildress1_commit-chronicles&metric=coverage)](https://sonarcloud.io/project/overview?id=anchildress1_commit-chronicles)

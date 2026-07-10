@@ -1,4 +1,4 @@
-.PHONY: install dev format format-files format-check lint typecheck test build e2e perf secret-scan deploy ai-checks clean
+.PHONY: install dev format format-files format-check lint typecheck test build e2e perf secret-scan actionlint deploy ai-checks clean
 
 # Install all dependencies
 install:
@@ -63,13 +63,22 @@ secret-scan:
 		exit 1; \
 	fi
 
+# Lint GitHub Actions workflows (local only — never in CI)
+actionlint:
+	@if command -v actionlint > /dev/null; then \
+		actionlint; \
+	else \
+		echo "❌ actionlint not found. Install: brew install actionlint"; \
+		exit 1; \
+	fi
+
 # Deploy to Cloudflare Workers
 deploy:
 	@echo "☁️ Deploying to Cloudflare..."
 	pnpm deploy
 
 # Composite gate: everything a PR must pass locally before pushing
-ai-checks: format-check lint typecheck test
+ai-checks: format-check lint typecheck test actionlint
 
 # Remove build artifacts and dependencies
 clean:

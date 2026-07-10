@@ -1,0 +1,45 @@
+# Dependabot — keep dependencies current without burying the review queue.
+# Two ecosystems, one grouped PR per ecosystem, schedules staggered so the two
+# PRs rarely sit open at the same time. open-pull-requests-limit is per-ecosystem.
+# cooldown holds proposals for 7 days after a publish so a compromised fresh
+# release can't be pulled in before it's caught.
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: 'chore(deps)'
+      include: scope
+    groups:
+      gha:
+        patterns:
+          - '*'
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: thursday
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    labels:
+      - dependencies
+      - javascript
+    commit-message:
+      prefix: 'chore(deps)'
+      include: scope
+    groups:
+      npm:
+        patterns:
+          - '*'

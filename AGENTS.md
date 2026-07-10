@@ -33,9 +33,11 @@ Canonical instruction source for this repository. Treat this file as authoritati
 - Use Conventional Commits.
 - Every commit must be GPG-signed and atomic (one logical change).
 - Never land directly on `main` — branch and PR always.
-- Include the required RAI footer identifying the model:
+- Include the required RAI footer identifying the model, plus a human sign-off
+  trailer (commitlint enforces both — use `git commit -s` to add the latter):
   ```
-  Generated-by: <AI agent name and email>
+  Generated-by: Claude Sonnet 5 <noreply@anthropic.com>
+  Signed-off-by: Your Name <your.email@example.com>
   ```
 
 ## Project: Commit Chronicles
@@ -52,7 +54,7 @@ Events" share. See `docs/initial-design-spec.md` for the full product spec.
   and the `/api/*` routes — one deployable unit, one URL.
 - **Build**: `@cloudflare/vite-plugin` drives one `vite build` producing both the
   client bundle and the Worker; `wrangler deploy` ships it.
-- **Package manager**: pnpm (pinned via Volta). Node 22+.
+- **Package manager**: pnpm (pinned via Volta). Node 24+.
 - **Tests**: Vitest (unit) + Playwright (e2e).
 
 ### Layout

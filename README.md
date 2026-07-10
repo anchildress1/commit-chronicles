@@ -25,7 +25,7 @@ Full spec: [`docs/initial-design-spec.md`](docs/initial-design-spec.md).
 - **Vite + React 19** SPA (TypeScript, strict mode)
 - **One Cloudflare Worker** (Hono) serving both the static assets and the `/api/*`
   routes — single deployable unit, single URL, shipped with `wrangler deploy`
-- **pnpm** (pinned via Volta), Node 22+
+- **pnpm** (pinned via Volta), Node 24+
 - **Vitest** (unit) + **Playwright** (e2e)
 
 ## Getting Started

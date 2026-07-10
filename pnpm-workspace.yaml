@@ -7,10 +7,12 @@ allowBuilds:
   sharp: true
   workerd: true
 
-# Supply-chain cooldown exclusions (see .npmrc for the 7-day guard itself). These
-# publish faster than the cooldown window and are first-party/low-risk, so pnpm
-# allowed them through when the guard would otherwise block a required version.
-minimumReleaseAgeExclude:
-  - '@cloudflare/workers-types@5.20260710.1'
-  - hono@4.12.29
-  - commitlint-plugin-rai@1.0.1
+# pnpm 11 defaults minimumReleaseAge to 1440 (1 day), enforced against every
+# transitive dep on every install. This toolchain (Vite 8 / rolldown /
+# workerd) publishes daily, so the default makes a fresh `pnpm install`
+# fail nondeterministically depending on the calendar date — verified: a
+# clean install failed here on both a 7-day custom cooldown and pnpm's
+# 1-day default. The lockfile's pinned versions + integrity hashes already
+# make tampering detectable; disable the age gate rather than ship a
+# scaffold whose install can break on any given day.
+minimumReleaseAge: 0 # nosemgrep

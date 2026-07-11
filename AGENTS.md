@@ -11,7 +11,8 @@ Canonical instruction source for this repository. Treat this file as authoritati
 
 - Goal is long-term maintainable and reliable solutions only.
 - Do not implement quick fixes in this codebase for any reason.
-- Any test files introduced for local validation must be removed, not committed.
+- Throwaway scripts or scratch files used for local validation must be removed,
+  not committed — this does not apply to the project's actual test suite.
 - Prerelease changes are never a breaking change; do not add backwards-compat shims.
 - Do not run audible completion commands such as `say`; completion belongs in chat,
   not in a tool transcript. Tiny robot confetti is still confetti.
@@ -84,4 +85,5 @@ product spec.
 
 ## Documentation
 
-- Do not add docs to the project until specifically asked.
+- Do not create unsolicited documentation. Updating existing docs when asked
+  (this file, the spec, READMEs) is expected, not exempted.

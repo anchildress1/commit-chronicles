@@ -55,8 +55,9 @@ for the full product spec and `docs/build-plan.md` for the delivery order.
 
 - **Data + AI engine**: Snowflake does the work. An external access integration
   reaches `api.github.com` from inside a stored procedure; plain SQL views score the
-  storylines; `AI_COMPLETE` (with a `response_format` JSON schema) narrates the winner
-  and picks the accent color.
+  storylines; and `CHRONICLE_CARD` — a custom Cortex AI function registered via
+  `SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION` — narrates the winner and picks the accent
+  color in one schema-constrained call.
 - **Backend**: Cloud Run — `/api/generate`, plus serving `/{owner}/{repo}` and
   `/{owner}/{repo}/card.svg`. It renders the SVG from Snowflake's card payload and
   writes it to the bucket. It computes no analysis of its own.

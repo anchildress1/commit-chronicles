@@ -83,7 +83,10 @@ SELECT
 FROM COMMITS
 WHERE PARENT_COUNT <= 1                      -- merges are bookkeeping, not confession
   AND NOT IS_BOT                             -- flagged at ingestion, not guessed here
-  AND SUBJECT NOT RLIKE '^(Merge (pull request|branch|remote)|Bump |chore\\(deps\\)|Update dependenc)';
+  -- Trailing .* is load-bearing: Snowflake's RLIKE implicitly anchors at BOTH
+  -- ends, so a prefix pattern without it only matches a subject equal to the
+  -- prefix and silently filters nothing.
+  AND SUBJECT NOT RLIKE '(Merge (pull request|branch|remote)|Bump |chore\\(deps\\)|Update dependenc).*';
 
 -- 6. Verify after first load.
 SELECT REPO_OWNER, REPO_NAME,

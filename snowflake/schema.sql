@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS COMMITS (
   COMMITTED_AT   TIMESTAMP_TZ,
   PARENT_COUNT   NUMBER(2,0),             -- >1 = merge
   IS_BOT         BOOLEAN      DEFAULT FALSE,  -- automated account (dependabot, CI), not a person
-  IS_AI_ASSISTED BOOLEAN      DEFAULT FALSE   -- human commit, AI trailer present. Not the same as IS_BOT.
+  IS_AI_ASSISTED BOOLEAN      DEFAULT FALSE   -- human commit naming an AI tool anywhere in the
+                                              -- message. Not the same as IS_BOT.
 );
 
 -- Migrate the old combined REPO ('owner/name') column into REPO_OWNER/REPO_NAME.

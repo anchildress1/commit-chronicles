@@ -59,12 +59,24 @@ REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 BOT_NAME_RE = re.compile(r"(?i)\[bot\]|dependabot|renovate|github-actions")
 BOT_EMAIL_RE = re.compile(r"(?i)\[bot\]@|noreply@github\.com$")
 
-# AI-assisted: a human committed it, but tooling left a trailer saying an AI
-# model helped. Distinct from bot — a person can commit AI-assisted work, a
-# bot's commits aren't "AI-assisted" just because they're automated.
-AI_TRAILER_RE = re.compile(
-    r"(?im)^(co-authored-by|generated-by|assisted-by|reviewed-by)\s*:.*"
-    r"(claude|anthropic|copilot|chatgpt|gpt-4|gpt-5|codex|gemini|cursor|devin|openai)"
+# AI-assisted: a human committed it, but an AI tool is named somewhere in the
+# message. Distinct from bot — a person can commit AI-assisted work, and a bot's
+# commits aren't "AI-assisted" just because they're automated.
+#
+# Named anywhere in the message, not only in a trailer. The old pattern required a
+# Co-authored-by/Generated-by line, which is one project's commit convention rather
+# than a fact about the world; "generated with Claude" in a body is the same signal
+# and was being missed.
+#
+# Deliberately absent: cursor, opus, haiku, sonnet, grok. Each is an ordinary English
+# or programming word ("reset cursor position", "close the db cursor", "grok the
+# parser") and matching them bare would quietly relabel normal commits as AI-assisted.
+# A claude-sonnet-4-5 attribution still matches on "claude".
+AI_NAME_RE = re.compile(
+    r"(?i)\b("
+    r"claude|anthropic|openai|chatgpt|gpt-[0-9]|copilot|codex|gemini"
+    r"|devin|aider|windsurf|codeium|tabnine|deepseek|llama|mistral"
+    r")\b"
 )
 
 
@@ -79,7 +91,7 @@ def _classify(commit_obj, gh_author, gh_committer, subject, body):
         or bool(BOT_NAME_RE.search(name))
         or bool(BOT_EMAIL_RE.search(email))
     )
-    is_ai_assisted = bool(AI_TRAILER_RE.search(f"{subject}\n{body or ''}"))
+    is_ai_assisted = bool(AI_NAME_RE.search(f"{subject}\n{body or ''}"))
     return is_bot, is_ai_assisted
 
 

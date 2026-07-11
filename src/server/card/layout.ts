@@ -1,0 +1,169 @@
+import { parseSnowflakeTimestamp } from './format.js';
+import type { PlotPoint } from './types.js';
+
+/** Card frame. 1200×630 is the README and social preview size; everything else derives. */
+export const CARD = { width: 1200, height: 630 } as const;
+
+export interface PlotBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The scatter's box. `y` is not a constant: the headline is set in three slots of
+ * model-written text and can run to three lines, so the plot starts below wherever the
+ * headline actually ended. A fixed top would let a long headline land on top of the arc.
+ */
+export const PLOT_X = 140;
+export const PLOT_WIDTH = 1000;
+export const PLOT_BOTTOM = 508;
+/** Below this the scatter is a smear, so the headline gives ground instead. */
+export const PLOT_MIN_HEIGHT = 150;
+
+export function plotBox(headlineBottom: number): PlotBox {
+  const top = Math.min(headlineBottom + 26, PLOT_BOTTOM - PLOT_MIN_HEIGHT);
+  return { x: PLOT_X, y: top, width: PLOT_WIDTH, height: PLOT_BOTTOM - top };
+}
+
+/**
+ * The clock is rotated so 6am sits at the top and the small hours fall to the floor —
+ * the shape of a repo that got later and later has to read as a descent, not a scatter.
+ */
+export function hourToY(hourFraction: number, box: PlotBox): number {
+  const rotated = (((hourFraction - 6) % 24) + 24) % 24;
+  return box.y + (0.06 + (rotated / 24) * 0.88) * box.height;
+}
+
+export function timeToX(ms: number, startMs: number, endMs: number, box: PlotBox): number {
+  const span = endMs - startMs;
+  const fraction = span <= 0 ? 0.5 : (ms - startMs) / span;
+  return box.x + (0.03 + fraction * 0.94) * box.width;
+}
+
+export interface Dot {
+  x: number;
+  y: number;
+  night: boolean;
+  /** The final commit gets the accent dot — it is the point of most of these stories. */
+  last: boolean;
+  t: string;
+}
+
+export interface PlotGeometry {
+  dots: Dot[];
+  startMs: number;
+  endMs: number;
+  xTicks: { x: number; label: string }[];
+  yTicks: { y: number; label: string }[];
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Place every commit. `h` is Snowflake's UTC hour and `m` its minute — the card annotates
+ * exact times, which an integer hour cannot produce.
+ */
+export function buildPlot(plot: PlotPoint[], box: PlotBox): PlotGeometry {
+  const points = plot
+    .map((p) => ({ ...p, ms: parseSnowflakeTimestamp(p.t).getTime() }))
+    .sort((a, b) => a.ms - b.ms);
+
+  const startMs = points[0]?.ms ?? 0;
+  const endMs = points[points.length - 1]?.ms ?? startMs + 1;
+  const lastIndex = points.length - 1;
+
+  const dots = points.map((p, index) => ({
+    x: timeToX(p.ms, startMs, endMs, box),
+    y: hourToY(p.h + p.m / 60, box),
+    night: p.n,
+    last: index === lastIndex,
+    t: p.t,
+  }));
+
+  return {
+    dots,
+    startMs,
+    endMs,
+    xTicks: monthTicks(startMs, endMs, box),
+    yTicks: [
+      { y: hourToY(18, box), label: '6 pm' },
+      { y: hourToY(0, box), label: 'midnight' },
+      { y: hourToY(3, box), label: '3 am' },
+    ],
+  };
+}
+
+/**
+ * One tick per month boundary the span crosses, thinned so a five-year history does not
+ * fill the axis with unreadable stubs.
+ */
+function monthTicks(startMs: number, endMs: number, box: PlotBox): { x: number; label: string }[] {
+  const start = new Date(startMs);
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const boundaries: Date[] = [];
+
+  while (cursor.getTime() <= endMs && boundaries.length < 400) {
+    if (cursor.getTime() >= startMs) boundaries.push(new Date(cursor));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+
+  // A year only earns a place on the axis when the span is long enough that the month
+  // alone is ambiguous. "JAN 26" on a three-month card reads as the 26th of January.
+  const showYear = boundaries.length > 12;
+  const stride = Math.ceil(boundaries.length / 6) || 1;
+
+  const ticks = boundaries
+    .filter((_, index) => index % stride === 0)
+    .map((date) => ({
+      x: timeToX(date.getTime(), startMs, endMs, box),
+      label: showYear
+        ? `${MONTHS[date.getUTCMonth()] ?? ''} ${String(date.getUTCFullYear()).slice(2)}`
+        : (MONTHS[date.getUTCMonth()] ?? ''),
+    }));
+
+  const end = new Date(endMs);
+  ticks.push({
+    x: timeToX(endMs, startMs, endMs, box),
+    label: `${MONTHS[end.getUTCMonth()] ?? ''} ${end.getUTCDate()}`,
+  });
+
+  // The closing tick always wins; a month boundary sitting on top of it is noise.
+  const closing = ticks[ticks.length - 1];
+  if (!closing) return ticks;
+
+  return ticks.filter((tick, index) => index === ticks.length - 1 || tick.x < closing.x - 60);
+}
+
+export interface VoidPanel {
+  x: number;
+  width: number;
+}
+
+/** Short silences are just gaps between dots. A void panel is a claim, so it has a floor. */
+export const VOID_MIN_DAYS = 14;
+
+export function buildVoidPanel(
+  gap: { days: number; from: string; to: string } | null,
+  startMs: number,
+  endMs: number,
+  box: PlotBox,
+): VoidPanel | null {
+  if (!gap || gap.days < VOID_MIN_DAYS) return null;
+
+  const fromX = timeToX(parseSnowflakeTimestamp(gap.from).getTime(), startMs, endMs, box);
+  const toX = timeToX(parseSnowflakeTimestamp(gap.to).getTime(), startMs, endMs, box);
+  const width = toX - fromX;
+
+  // A panel thinner than its own label reads as a rendering bug, not a silence.
+  if (width < 48) return null;
+
+  return { x: fromX, width };
+}
+
+/** Find the dot a named timestamp rides, by exact string match against `plot[].t`. */
+export function findDot(dots: Dot[], timestamp: string | null): Dot | null {
+  if (!timestamp) return null;
+  return dots.find((dot) => dot.t === timestamp) ?? null;
+}

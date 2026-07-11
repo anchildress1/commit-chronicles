@@ -18,6 +18,21 @@ SELECT
      5 AS NIGHT_END_HOUR;
 
 -- DAYS_SINCE_LAST is relative to now, so COLLAPSE is a claim about today.
+-- MODE() breaks ties nondeterministically, so a repo with two equally prolific authors
+-- could name a different one on every read. The card credits a person by name; it does
+-- not get to change its mind. Rank by commits, then by login, so the answer is stable.
+CREATE OR REPLACE VIEW REPO_PRIMARY_AUTHOR AS
+SELECT REPO_OWNER, REPO_NAME, AUTHOR, AUTHOR_LOGIN
+FROM (
+    SELECT REPO_OWNER, REPO_NAME, AUTHOR, AUTHOR_LOGIN, COUNT(*) AS AUTHORED
+    FROM COMMITS_CLEAN
+    GROUP BY REPO_OWNER, REPO_NAME, AUTHOR, AUTHOR_LOGIN
+)
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY REPO_OWNER, REPO_NAME
+    ORDER BY AUTHORED DESC, AUTHOR_LOGIN NULLS LAST, AUTHOR
+) = 1;
+
 CREATE OR REPLACE VIEW REPO_FACTS AS
 SELECT
     c.REPO_OWNER,
@@ -29,16 +44,17 @@ SELECT
     MAX(c.AUTHORED_AT)                              AS LAST_COMMIT_AT,
     MIN_BY(c.SUBJECT, c.AUTHORED_AT)                AS FIRST_COMMIT_SUBJECT,
     MAX_BY(c.SUBJECT, c.AUTHORED_AT)                AS LAST_COMMIT_SUBJECT,
-    MODE(c.AUTHOR)                                  AS PRIMARY_AUTHOR,
-    MODE(c.AUTHOR_LOGIN)                            AS PRIMARY_AUTHOR_LOGIN,
+    a.AUTHOR                                        AS PRIMARY_AUTHOR,
+    a.AUTHOR_LOGIN                                  AS PRIMARY_AUTHOR_LOGIN,
     DATEDIFF(day, MIN(c.AUTHORED_AT), MAX(c.AUTHORED_AT))  AS SPAN_DAYS,
     DATEDIFF(day, MAX(c.AUTHORED_AT), CURRENT_TIMESTAMP()) AS DAYS_SINCE_LAST,
     SUM(IFF(c.UTC_HOUR >= cfg.NIGHT_START_HOUR
          OR c.UTC_HOUR <  cfg.NIGHT_END_HOUR, 1, 0))       AS NIGHT_COMMITS,
     SUM(IFF(c.IS_AI_ASSISTED, 1, 0))                AS AI_ASSISTED_COMMITS
 FROM COMMITS_CLEAN c
+JOIN REPO_PRIMARY_AUTHOR a USING (REPO_OWNER, REPO_NAME)
 CROSS JOIN DETECTOR_CONFIG cfg
-GROUP BY c.REPO_OWNER, c.REPO_NAME;
+GROUP BY c.REPO_OWNER, c.REPO_NAME, a.AUTHOR, a.AUTHOR_LOGIN;
 
 CREATE OR REPLACE VIEW COMMIT_GAPS AS
 WITH lagged AS (

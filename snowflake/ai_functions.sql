@@ -1,39 +1,21 @@
--- Commit Chronicles — the Cortex function
+-- Commit Chronicles — CHRONICLE_CARD. Wraps AI_COMPLETE; one schema-constrained call.
 --
--- CHRONICLE_CARD is a plain SQL UDF wrapping AI_COMPLETE. One call, one
--- schema-constrained JSON object, nothing to parse out of prose.
---
--- Written by hand rather than through Cortex AI Function Studio, on purpose. The Studio
--- registers functions via SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION, and the docs are explicit
--- that those procedures "are not intended to be called directly" and that their
--- "signatures and behavior may change without notice". Its supported front doors are the
--- Snowsight wizard and the Cortex Code CLI — and a function clicked into existence in a
--- UI is not in this repo, which the spec forbids.
---
--- So: neither. CREATE_AI_FUNCTION emits an ordinary UDF around AI_COMPLETE — there is no
--- privileged machinery inside it — and that is written out directly below. Public API,
--- stable contract, source of truth in git, and CREATE OR REPLACE actually works (the
--- Studio procedure has no OR REPLACE, which already cost one debugging cycle where a
--- redeploy silently kept the old prompt).
---
--- What Cortex reads is rationed by the detector, not here: it sees the winning
--- storyline's ~20 commits and the computed facts, never the whole history.
+-- Not built with Cortex AI Function Studio: it registers via
+-- SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION, which the docs mark internal, not for direct
+-- calls, and subject to change without notice.
 
 USE ROLE ACCOUNTADMIN;
 USE WAREHOUSE CHRONICLES_WH;
 USE SCHEMA CHRONICLES.RAW;
 
--- Registered by the Studio in earlier builds. Both arities, because Snowflake overloads
--- on arity and a stale signature would stay alive and callable.
+-- Studio-registered functions from earlier builds. Snowflake overloads on arity.
 DROP FUNCTION IF EXISTS CHRONICLE_KICKER(VARCHAR, VARCHAR);
 DROP FUNCTION IF EXISTS CHRONICLE_HEADLINE(VARCHAR, VARCHAR, VARCHAR);
 DROP FUNCTION IF EXISTS CHRONICLE_THESIS(VARCHAR, VARCHAR, VARCHAR);
 DROP FUNCTION IF EXISTS CHRONICLE_ACCENT(VARCHAR, VARCHAR, VARCHAR);
 DROP FUNCTION IF EXISTS CHRONICLE_CARD(VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR);
 
--- Each fact arrives as its own argument and is labelled in the user message. Handed a
--- single JSON blob the model read an adjacent integer and captioned it wrong, writing
--- "fifty-six commits after midnight" when 56 was the total and 47 was the night count.
+-- Facts pass as discrete args, not one JSON blob: the model mislabels adjacent integers.
 CREATE OR REPLACE FUNCTION CHRONICLE_CARD(
     STORYLINE           VARCHAR,
     STATUS              VARCHAR,
@@ -117,10 +99,8 @@ $$
                  || '\nCommit messages from the winning thread: '   || COMMITS
             )
         ),
+        -- Hitting max_tokens returns NULL, not an error. Keep the ceiling loose.
         model_parameters => {'temperature': 0, 'max_tokens': 1024},
-        -- Generous ceiling on purpose: a structured response that hits max_tokens comes
-        -- back NULL instead of raising, so a stingy budget is indistinguishable from an
-        -- outage. READ_REPO treats a NULL narration as a hard failure.
         response_format => PARSE_JSON('{
             "type": "json",
             "schema": {
@@ -141,5 +121,3 @@ $$
     )
 $$;
 
--- No smoke test here on purpose. Invoking this costs Cortex tokens; a card is generated
--- once, through READ_REPO, on a real cache miss. It is not a thing to poke at.

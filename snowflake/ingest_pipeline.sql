@@ -1,34 +1,20 @@
--- Commit Chronicles — GitHub ingest pipeline (Snowflake-native)
---
--- Deployed. GITHUB_TOKEN secret created separately — see docs/snowflake-setup.md
--- step 5. Never put the literal token value in this file.
---
--- Replaces the external PUT/COPY INTO loader in schema.sql: this pulls commits
--- for a given owner/repo directly from the GitHub REST API inside a Python
--- stored procedure, using an External Access Integration for egress.
+-- Commit Chronicles — GitHub ingest. GITHUB_TOKEN secret: docs/snowflake-setup.md step 5.
 
 USE ROLE ACCOUNTADMIN;
 USE WAREHOUSE CHRONICLES_WH;
 USE SCHEMA CHRONICLES.RAW;
 
--- 1. Network egress: GitHub's REST API only.
 CREATE OR REPLACE NETWORK RULE GITHUB_API_RULE
   MODE = EGRESS
   TYPE = HOST_PORT
   VALUE_LIST = ('api.github.com');
-
--- 2. Auth for authenticated requests (60 req/hr unauth vs 5000 req/hr auth).
--- GITHUB_TOKEN secret already exists (docs/snowflake-setup.md step 5).
 
 CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION GITHUB_API_ACCESS
   ALLOWED_NETWORK_RULES = (GITHUB_API_RULE)
   ALLOWED_AUTHENTICATION_SECRETS = (GITHUB_TOKEN)
   ENABLED = TRUE;
 
--- 3. Ingest procedure. owner/repo in, rows in COMMITS out.
---
--- MAX_COMMITS is clamped server-side (HARD_CAP below) regardless of what the
--- caller passes — spec requires a hard cap per repo, not just a suggestion.
+-- MAX_COMMITS is clamped to HARD_CAP server-side regardless of what the caller passes.
 CREATE OR REPLACE PROCEDURE INGEST_REPO_COMMITS(
   REPO_OWNER STRING,
   REPO_NAME STRING,
@@ -53,25 +39,11 @@ HARD_CAP = 2000
 OWNER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 
-# Bot: automated non-human accounts (dependabot, renovate, CI). Signaled by
-# GitHub's own linked-account type, falling back to name/email patterns for
-# commits GitHub couldn't match to an account.
+# Fallback for commits GitHub could not match to an account type.
 BOT_NAME_RE = re.compile(r"(?i)\[bot\]|dependabot|renovate|github-actions")
 BOT_EMAIL_RE = re.compile(r"(?i)\[bot\]@|noreply@github\.com$")
 
-# AI-assisted: a human committed it, but an AI tool is named somewhere in the
-# message. Distinct from bot — a person can commit AI-assisted work, and a bot's
-# commits aren't "AI-assisted" just because they're automated.
-#
-# Named anywhere in the message, not only in a trailer. The old pattern required a
-# Co-authored-by/Generated-by line, which is one project's commit convention rather
-# than a fact about the world; "generated with Claude" in a body is the same signal
-# and was being missed.
-#
-# Deliberately absent: cursor, opus, haiku, sonnet, grok. Each is an ordinary English
-# or programming word ("reset cursor position", "close the db cursor", "grok the
-# parser") and matching them bare would quietly relabel normal commits as AI-assisted.
-# A claude-sonnet-4-5 attribution still matches on "claude".
+# Omits cursor/opus/haiku/sonnet/grok: ordinary words that would match normal commits.
 AI_NAME_RE = re.compile(
     r"(?i)\b("
     r"claude|anthropic|openai|chatgpt|gpt-[0-9]|copilot|codex|gemini"
@@ -117,9 +89,7 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
     if repo_resp.json().get("private"):
         return {"status": "failed", "errorCode": "repo_private", "repo": repo_slug}
 
-    # Fetch one more than max_commits: if that many actually come back, the
-    # repo has more history than the cap allows. Reject as oversized instead
-    # of silently inserting a truncated (and misleadingly "ready") history.
+    # One over the cap: if it comes back full, the repo is oversized, not truncated.
     fetch_target = max_commits + 1
 
     rows = []

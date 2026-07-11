@@ -1,36 +1,23 @@
--- Commit Chronicles — the detector
+-- Commit Chronicles — storyline detector. Plain SQL, no LLM.
 --
--- Plain SQL. No LLM, no cost. This is the part that finds the story: score every
--- candidate storyline deterministically, keep the highest, and hand Cortex only
--- the winning thread's evidence.
---
--- Regex notes, learned the hard way. Snowflake's engine:
---   * implicitly anchors at BOTH ends — a bare prefix pattern matches nothing, so
---     every pattern here carries an explicit .*
---   * rejects inline flags like (?i) — case-insensitivity is REGEXP_LIKE's 3rd arg
---   * does not honour \b word boundaries
---
--- Determinism caveat: COLLAPSE depends on DAYS_SINCE_LAST, measured against
--- CURRENT_TIMESTAMP. The same repo yields the same story on the same day; a repo
--- that crosses the abandonment threshold overnight will change. That is intended
--- — "abandoned" is a claim about now, not a fact about the past.
+-- Snowflake regex: anchors at BOTH ends (bare prefixes match nothing), rejects inline
+-- flags like (?i), ignores \b.
 
 USE ROLE ACCOUNTADMIN;
 USE WAREHOUSE CHRONICLES_WH;
 USE SCHEMA CHRONICLES.RAW;
 
--- 1. Tunables. One place, so tightening a floor is a diff and not a scavenger hunt.
 CREATE OR REPLACE VIEW DETECTOR_CONFIG AS
 SELECT
-    15 AS MIN_COMMITS,           -- floor: below this a repo has no story worth telling
-    30 AS RELAPSE_MIN_GAP_DAYS,  -- a gap shorter than this is a holiday, not a relapse
-    90 AS ABANDONED_AFTER_DAYS,  -- silence this long reads as death, not a pause
-     7 AS BINGE_MIN_STREAK_DAYS, -- a working week straight is the price of entry
-     4 AS FIGHT_MIN_COMMITS,     -- reverts below this are a bad afternoon, not a war
-    22 AS NIGHT_START_HOUR,      -- night = hour >= 22 ...
-     5 AS NIGHT_END_HOUR;        -- ... or hour < 5
+    15 AS MIN_COMMITS,
+    30 AS RELAPSE_MIN_GAP_DAYS,
+    90 AS ABANDONED_AFTER_DAYS,
+     7 AS BINGE_MIN_STREAK_DAYS,
+     4 AS FIGHT_MIN_COMMITS,
+    22 AS NIGHT_START_HOUR,
+     5 AS NIGHT_END_HOUR;
 
--- 2. Per-repo aggregate facts. Every storyline reads its floors from here.
+-- DAYS_SINCE_LAST is relative to now, so COLLAPSE is a claim about today.
 CREATE OR REPLACE VIEW REPO_FACTS AS
 SELECT
     c.REPO_OWNER,
@@ -49,7 +36,6 @@ FROM COMMITS_CLEAN c
 CROSS JOIN DETECTOR_CONFIG cfg
 GROUP BY c.REPO_OWNER, c.REPO_NAME;
 
--- 3. Gap between each commit and the one before it. The spine of relapse.
 CREATE OR REPLACE VIEW COMMIT_GAPS AS
 WITH lagged AS (
     SELECT
@@ -65,21 +51,14 @@ SELECT
 FROM lagged
 WHERE PREV_AT IS NOT NULL;
 
--- ─────────────────────────────────────────────────────────────────────────────
--- The storylines. Each emits the same shape, in the same column order:
---   REPO_OWNER, REPO_NAME, STORYLINE, SCORE (0-100), PIVOT_AT, EVIDENCE
--- PIVOT_AT is the moment the story turns — the evidence window is drawn around
--- it. EVIDENCE holds the computed facts Cortex is allowed to narrate, and
--- nothing else.
--- ─────────────────────────────────────────────────────────────────────────────
+-- Every storyline emits: REPO_OWNER, REPO_NAME, STORYLINE, SCORE (0-100), PIVOT_AT, EVIDENCE.
 
--- RELAPSE — went dark, came back.
 CREATE OR REPLACE VIEW STORY_RELAPSE AS
 SELECT
     g.REPO_OWNER,
     g.REPO_NAME,
     'relapse'                           AS STORYLINE,
-    LEAST(100, ROUND(g.GAP_DAYS * 0.8)) AS SCORE,   -- 125 dark days saturates the scale
+    LEAST(100, ROUND(g.GAP_DAYS * 0.8)) AS SCORE,
     g.AUTHORED_AT                       AS PIVOT_AT,
     OBJECT_CONSTRUCT(
         'gapDays',      g.GAP_DAYS,
@@ -95,10 +74,9 @@ WHERE f.COMMIT_COUNT >= cfg.MIN_COMMITS
   AND g.GAP_DAYS     >= cfg.RELAPSE_MIN_GAP_DAYS
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY g.REPO_OWNER, g.REPO_NAME
-    ORDER BY g.GAP_DAYS DESC, g.AUTHORED_AT   -- longest dark stretch; earliest breaks the tie
+    ORDER BY g.GAP_DAYS DESC, g.AUTHORED_AT
 ) = 1;
 
--- NOCTURNE — a repo that only exists after dark.
 CREATE OR REPLACE VIEW STORY_NOCTURNE AS
 WITH night AS (
     SELECT
@@ -128,14 +106,13 @@ FROM REPO_FACTS f
 JOIN night n USING (REPO_OWNER, REPO_NAME)
 CROSS JOIN DETECTOR_CONFIG cfg
 WHERE f.COMMIT_COUNT  >= cfg.MIN_COMMITS
-  AND f.NIGHT_COMMITS >= 0.5 * f.COMMIT_COUNT;   -- a minority of night commits is not a habit
+  AND f.NIGHT_COMMITS >= 0.5 * f.COMMIT_COUNT;
 
--- BINGE — the longest unbroken run of days.
+-- Score curve is the flattest of the six: a long streak is the weakest story here.
 CREATE OR REPLACE VIEW STORY_BINGE AS
 WITH active_days AS (
     SELECT DISTINCT REPO_OWNER, REPO_NAME, AUTHORED_DATE FROM COMMITS_CLEAN
 ),
--- Consecutive dates share a (date - row_number) key. Classic gaps-and-islands.
 islands AS (
     SELECT
         REPO_OWNER, REPO_NAME, AUTHORED_DATE,
@@ -157,9 +134,6 @@ SELECT
     s.REPO_OWNER,
     s.REPO_NAME,
     'binge'                       AS STORYLINE,
-    -- Deliberately the flattest curve of the six. "They worked ten days straight"
-    -- is the weakest story here, and at *7 it was outscoring a genuine 56% night
-    -- habit. A binge has to be genuinely obsessive (25+ days) before it wins.
     LEAST(100, s.STREAK_DAYS * 4) AS SCORE,
     TO_TIMESTAMP_TZ(s.STREAK_END) AS PIVOT_AT,
     OBJECT_CONSTRUCT(
@@ -179,7 +153,6 @@ QUALIFY ROW_NUMBER() OVER (
     ORDER BY s.STREAK_DAYS DESC, s.STREAK_END
 ) = 1;
 
--- COLLAPSE — it did not taper. It spiked, and then it stopped.
 CREATE OR REPLACE VIEW STORY_COLLAPSE AS
 WITH final_burst AS (
     SELECT
@@ -201,8 +174,6 @@ SELECT
     f.REPO_OWNER,
     f.REPO_NAME,
     'collapse'    AS STORYLINE,
-    -- Base 40 for being dead at all, plus how long it has been dead, plus how hot
-    -- it was running when it died. A slow fade cannot outscore a real spike.
     LEAST(100, ROUND(
         40
         + LEAST(30, f.DAYS_SINCE_LAST / 12.0)
@@ -224,19 +195,14 @@ JOIN last_commit l USING (REPO_OWNER, REPO_NAME)
 CROSS JOIN DETECTOR_CONFIG cfg
 WHERE f.COMMIT_COUNT       >= cfg.MIN_COMMITS
   AND f.DAYS_SINCE_LAST    >= cfg.ABANDONED_AFTER_DAYS
-  AND b.COMMITS_IN_FINAL_30D >= 0.15 * f.COMMIT_COUNT;  -- it was still busy when it died
+  AND b.COMMITS_IN_FINAL_30D >= 0.15 * f.COMMIT_COUNT;
 
--- FIGHT — a cluster of reverts and hotfixes inside one week. Regex, not AI.
 CREATE OR REPLACE VIEW STORY_FIGHT AS
 WITH fights AS (
     SELECT REPO_OWNER, REPO_NAME, SUBJECT, AUTHORED_AT
     FROM COMMITS_CLEAN
-    -- REGEXP_LIKE(..., 'i'), not an inline (?i): Snowflake's regex engine rejects
-    -- inline flags and does not honour \b. Substring match is enough — "revert"
-    -- already catches "reverted" and "reverting".
     WHERE REGEXP_LIKE(SUBJECT, '.*(revert|hotfix|rollback|roll back|re-fix|refix).*', 'i')
 ),
--- Every fight commit anchors a 7-day window; the densest window wins.
 windows AS (
     SELECT
         a.REPO_OWNER,
@@ -275,8 +241,7 @@ QUALIFY ROW_NUMBER() OVER (
     ORDER BY w.FIGHT_COMMITS DESC, w.WINDOW_START
 ) = 1;
 
--- RESURRECTION — dead, returned, AND shipped. Strictly a better story than a bare
--- relapse, so it is scored to outrank the relapse it is built on.
+-- Scored above the relapse it is built on, so it always outranks it.
 CREATE OR REPLACE VIEW STORY_RESURRECTION AS
 WITH shipped_after_return AS (
     SELECT
@@ -312,9 +277,6 @@ SELECT
 FROM STORY_RELAPSE r
 JOIN shipped_after_return s USING (REPO_OWNER, REPO_NAME);
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 4. Score every storyline, then pick exactly one.
--- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE VIEW STORYLINE_SCORES AS
 WITH every_story AS (
     SELECT REPO_OWNER, REPO_NAME, STORYLINE, SCORE, PIVOT_AT, EVIDENCE FROM STORY_RELAPSE      UNION ALL
@@ -326,22 +288,16 @@ WITH every_story AS (
 )
 SELECT
     REPO_OWNER, REPO_NAME, STORYLINE, SCORE, PIVOT_AT, EVIDENCE,
-    -- Ties are broken by which story is worth telling, not by which name sorts
-    -- first. Alphabetical order would hand every tie to 'binge', the dullest of
-    -- the six, purely because it starts with a b.
     CASE STORYLINE
-        WHEN 'resurrection' THEN 1   -- dead, back, and shipped
-        WHEN 'collapse'     THEN 2   -- it spiked, then it stopped
-        WHEN 'relapse'      THEN 3   -- went dark, came back
-        WHEN 'nocturne'     THEN 4   -- it only ever happened at night
-        WHEN 'fight'        THEN 5   -- a week of reverts
-        WHEN 'binge'        THEN 6   -- they worked a lot of days in a row
+        WHEN 'resurrection' THEN 1
+        WHEN 'collapse'     THEN 2
+        WHEN 'relapse'      THEN 3
+        WHEN 'nocturne'     THEN 4
+        WHEN 'fight'        THEN 5
+        WHEN 'binge'        THEN 6
     END AS DRAMA_RANK
 FROM every_story;
 
--- The winner. Repos below the floor, or with nothing that fired, surface as 'none'
--- rather than vanishing — a sparse repo gets an honest template card, not
--- manufactured drama.
 CREATE OR REPLACE VIEW REPO_STORYLINE AS
 SELECT
     f.REPO_OWNER,
@@ -365,26 +321,17 @@ FROM REPO_FACTS f
 LEFT JOIN STORYLINE_SCORES s USING (REPO_OWNER, REPO_NAME)
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY f.REPO_OWNER, f.REPO_NAME
-    ORDER BY s.SCORE DESC NULLS LAST, s.DRAMA_RANK  -- score first, then drama; never alphabetical
+    ORDER BY s.SCORE DESC NULLS LAST, s.DRAMA_RANK
 ) = 1;
 
--- 5. The Cortex input. Only the winning thread's commits — never the whole history.
--- Drawn around the pivot, plus the opening and the ending, which belong to the arc
--- no matter which storyline won.
+-- The only rows Cortex ever sees. A 'none' storyline has a NULL PIVOT_AT, which would
+-- make the pivot window tie across the whole partition and pick rows nondeterministically.
 CREATE OR REPLACE VIEW CARD_EVIDENCE AS
 WITH picked AS (
     SELECT
         c.REPO_OWNER, c.REPO_NAME, c.SUBJECT, c.AUTHORED_AT, c.UTC_HOUR, c.IS_AI_ASSISTED
     FROM COMMITS_CLEAN c
     JOIN REPO_STORYLINE w USING (REPO_OWNER, REPO_NAME)
-    -- The pivot window only exists when there IS a pivot. A 'none' storyline has a NULL
-    -- PIVOT_AT, which makes ABS(DATEDIFF(...)) NULL for every row — the whole partition
-    -- ties, and ROW_NUMBER then picks twelve commits arbitrarily and differently each
-    -- run. A no-story repo gets its opening and its ending, which is all it has.
-    --
-    -- AUTHORED_AT is the tiebreak, not decoration: two commits equidistant from the
-    -- pivot tie as well, and an arbitrary winner there is the same bug wearing a smaller
-    -- hat. Scoring is deterministic or it is not a detector.
     QUALIFY
         (w.PIVOT_AT IS NOT NULL
          AND ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
@@ -411,16 +358,3 @@ SELECT
 FROM REPO_STORYLINE w
 JOIN picked p USING (REPO_OWNER, REPO_NAME)
 GROUP BY w.REPO_OWNER, w.REPO_NAME, w.STORYLINE, w.SCORE, w.FACTS, w.EVIDENCE;
-
--- 6. Verify. One query, every repo currently ingested: what fired, and what won.
-SELECT
-    r.REPO_OWNER || '/' || r.REPO_NAME AS REPO,
-    r.STORYLINE                        AS WINNER,
-    r.SCORE                            AS WINNING_SCORE,
-    ARRAY_AGG(s.STORYLINE || ':' || s.SCORE)
-        WITHIN GROUP (ORDER BY s.SCORE DESC) AS ALL_STORYLINES,
-    r.EVIDENCE
-FROM REPO_STORYLINE r
-LEFT JOIN STORYLINE_SCORES s USING (REPO_OWNER, REPO_NAME)
-GROUP BY r.REPO_OWNER, r.REPO_NAME, r.STORYLINE, r.SCORE, r.EVIDENCE
-ORDER BY REPO;

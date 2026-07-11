@@ -1,6 +1,6 @@
 # Commit Chronicles — V1 Spec
 
-*DEV Weekend Challenge: Passion Edition. Prize target: **Best use of Snowflake**. Due Mon Jul 13, 6:59 AM UTC.*
+_DEV Weekend Challenge: Passion Edition. Prize target: **Best use of Snowflake**. Due Mon Jul 13, 6:59 AM UTC._
 
 ## Thesis
 
@@ -38,7 +38,7 @@ If the card would work equally well as a bar chart, it has failed.
 
 ## Voice rules
 
-**Have an opinion.** A card that only describes is a report, and nobody shares a report. The whole product is the sentence that says what the shape *means* — "the commits got later and later, and then they stopped." Write that sentence.
+**Have an opinion.** A card that only describes is a report, and nobody shares a report. The whole product is the sentence that says what the shape _means_ — "the commits got later and later, and then they stopped." Write that sentence.
 
 - **Interpret the arc. Never invent the facts.** Every timestamp, count, gap, and quoted message is real and derived from the ingested commits. Read the shape freely; do not manufacture events.
 - **Quote the commit messages.** They're the author's own words and they're the best material on the card. A repo that ends on `fix: rp my release please token readonly` at 3:53am tells you more than any adjective.
@@ -86,7 +86,12 @@ The Snowflake Marketplace archive is not used in V1. This product is about one s
 
 ```text
 Cloud Run  (static SPA + /api/generate — no analysis logic)
-   │  POST /api/generate → CALL READ_REPO(owner, repo)
+   │  POST /api/generate → guards, quota, mark `generating`, enqueue
+   ▼
+Cloud Tasks  (commit-chronicles-gen)
+   │  POST /internal/generate  (OIDC-signed)
+   ▼
+Cloud Run worker  → CALL READ_REPO(owner, repo)
    ▼
 Snowflake
    ├─ ingest proc   external access → api.github.com → COMMITS
@@ -100,6 +105,19 @@ Cloud Run  templates the SVG → writes gs://…/{owner}/{repo}/card.svg
 Public GCS bucket  (serving every cached page + card; the file's existence is the state)
 ```
 
+**Generation goes through a queue, and that is a cost decision.** The work has to outlive
+the browser tab. Detaching it from the request that started it would need Cloud Run's
+`--no-cpu-throttling`, which bills instance time instead of request time — you pay for the
+container to sit there doing nothing. Cloud Tasks calls back into the service, so the
+pipeline runs _inside_ a request: CPU is billed only while it is working, the service still
+scales to zero, and closing the tab has no effect on a job that is no longer attached to
+the tab's connection. The queue's `max-concurrent-dispatches` is the real ceiling on the
+Cortex spend rate — at most two repos can be in the warehouse at once, whatever the front
+page is doing.
+
+`/internal/generate` is on a public service, so it verifies the task's OIDC token against
+the invoker service account before it spends anything. No token, no work.
+
 - **Snowflake** reaches GitHub itself via an external access integration, finds the story in SQL, and narrates it with Cortex. The ingest layer is a stored procedure, not a service.
 - **Cloud Run** owns the routes, calls one Snowflake proc, and turns the returned payload into an SVG. It fetches no commit data and computes no analysis.
 - **The GCS bucket** is the cache of record. A cached page or card never re-runs Cortex.
@@ -110,20 +128,20 @@ Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are
 
 ## Snowflake objects
 
-| object | job |
-|---|---|
-| `GITHUB_API_RULE` (EGRESS, `api.github.com`) | let the warehouse out |
-| `GITHUB_TOKEN` (`SECRET`) | GitHub token |
-| `GITHUB_API_ACCESS` (`EXTERNAL ACCESS INTEGRATION`) | binds rule + secret |
-| `COMMITS` | owner, repo, sha, subject, body, authored_at, bot/AI flags |
-| `COMMITS_CLEAN` (view) | drops merges and bots; derives date + hour parts |
-| `PROC INGEST_REPO_COMMITS(owner, repo)` | Python + external access → Commits API → `COMMITS` |
-| detector views | gaps, streaks, night share, storyline scores → `REPO_STORYLINE` |
-| `CARD_EVIDENCE` (view) | the winning thread's ~20 commits — the only thing Cortex sees |
-| `CHRONICLE_CARD` (UDF) | hand-written wrapper around `AI_COMPLETE`; one structured call → the whole card |
-| `CARDS` | the generated card payloads, plus the Cortex query id for cost audit |
-| `PROC READ_REPO(owner, repo)` | the one entry point: ingests on a cold repo, then detector → `CHRONICLE_CARD` → structured card payload |
-| `TASK` | scheduled regeneration for the gallery |
+| object                                              | job                                                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `GITHUB_API_RULE` (EGRESS, `api.github.com`)        | let the warehouse out                                                                                   |
+| `GITHUB_TOKEN` (`SECRET`)                           | GitHub token                                                                                            |
+| `GITHUB_API_ACCESS` (`EXTERNAL ACCESS INTEGRATION`) | binds rule + secret                                                                                     |
+| `COMMITS`                                           | owner, repo, sha, subject, body, authored_at, bot/AI flags                                              |
+| `COMMITS_CLEAN` (view)                              | drops merges and bots; derives date + hour parts                                                        |
+| `PROC INGEST_REPO_COMMITS(owner, repo)`             | Python + external access → Commits API → `COMMITS`                                                      |
+| detector views                                      | gaps, streaks, night share, storyline scores → `REPO_STORYLINE`                                         |
+| `CARD_EVIDENCE` (view)                              | the winning thread's ~20 commits — the only thing Cortex sees                                           |
+| `CHRONICLE_CARD` (UDF)                              | hand-written wrapper around `AI_COMPLETE`; one structured call → the whole card                         |
+| `CARDS`                                             | the generated card payloads, plus the Cortex query id for cost audit                                    |
+| `PROC READ_REPO(owner, repo)`                       | the one entry point: ingests on a cold repo, then detector → `CHRONICLE_CARD` → structured card payload |
+| `TASK`                                              | scheduled regeneration for the gallery                                                                  |
 
 Every object is SQL in the repo, deployed with the `snow` CLI. An object created by clicking in a UI does not exist.
 
@@ -131,14 +149,14 @@ Every object is SQL in the repo, deployed with the `snow` CLI. An object created
 
 This is the core of the product and the core of the Snowflake case. Score every candidate storyline deterministically; keep the highest. Surveying a repo's whole history produces a report. Picking one story produces an argument.
 
-| storyline | signal |
-|---|---|
-| **relapse** | `LAG` over commit dates — quiet ≥ N days, then resumed |
-| **nocturne** | share of commits after 22:00 |
-| **binge** | longest consecutive-day streak, or the heaviest single night |
-| **collapse** | a spike, then permanent silence |
-| **fight** | a cluster of reverts/hotfixes in a short window (regex — no AI needed) |
-| **resurrection** | quiet, resumed, and shipped a release |
+| storyline        | signal                                                                 |
+| ---------------- | ---------------------------------------------------------------------- |
+| **relapse**      | `LAG` over commit dates — quiet ≥ N days, then resumed                 |
+| **nocturne**     | share of commits after 22:00                                           |
+| **binge**        | longest consecutive-day streak, or the heaviest single night           |
+| **collapse**     | a spike, then permanent silence                                        |
+| **fight**        | a cluster of reverts/hotfixes in a short window (regex — no AI needed) |
+| **resurrection** | quiet, resumed, and shipped a release                                  |
 
 Apply floors — a storyline needs a minimum number of real commits so bot noise can't win. Scoring is deterministic: the same repo always yields the same story.
 
@@ -170,13 +188,13 @@ Nine keys. That is the whole surface area of the writing on the card.
 
 The palette is **muted neons** — bright but not fluorescent, saturated but not raw. Anchor hues on the spectrum:
 
-| hex       | family        | reads as                    |
-|-----------|---------------|-----------------------------|
-| `#e8a04a` | muted amber   | burn, heat, ember           |
-| `#e56b5a` | muted coral   | conflict, alarm, warning    |
-| `#d3e85a` | muted lime    | return, growth, life        |
-| `#7fe4c5` | muted mint    | cool, dawn, calm            |
-| `#6ab5f5` | muted sky     | night, distance, quiet      |
+| hex       | family      | reads as                 |
+| --------- | ----------- | ------------------------ |
+| `#e8a04a` | muted amber | burn, heat, ember        |
+| `#e56b5a` | muted coral | conflict, alarm, warning |
+| `#d3e85a` | muted lime  | return, growth, life     |
+| `#7fe4c5` | muted mint  | cool, dawn, calm         |
+| `#6ab5f5` | muted sky   | night, distance, quiet   |
 
 Cortex may drift slightly off these anchors — the constraint is the family, not the exact swatch. No greys, no browns, no fluorescents, no deep saturated primaries. `none`-storyline cards use grey (`#6b7280`) deliberately; that colour is reserved for "no story to tell".
 
@@ -188,29 +206,29 @@ Narration constraints: use only the supplied facts and invent nothing — then s
 
 Cortex writes the words the reader hears in the author's voice. The renderer composes everything else from `FACTS`, `STATUS`, `PIVOT_AT`, and the `PLOT` array. Do not teach Cortex to produce any of these.
 
-| element on the card                                 | source                                                   |
-|---|---|
-| Kicker slug prefix `ATLAS/PIPELINE — ` (accent)     | `REPO_OWNER/REPO_NAME`, uppercased                       |
-| Kicker genre (neutral)                              | Cortex `kicker`                                          |
-| Header meta `<N> COMMITS · <VERB> <MMM DAY>`        | `FACTS.commitCount` + status verb map + `FACTS.lastCommitAt` |
-| Headline (upright / italic / upright)               | Cortex `headline_upright`, `headline_accent`, `headline_trail` |
-| First-commit anchor `<TIME> · <DATE> — <label>`     | `FACTS.firstCommitAt` + Cortex `label_first`             |
-| Pivot anchor (drawn only when `label_pivot` non-empty) | `pivotAt` + Cortex `label_pivot`                       |
-| Last-commit anchor                                  | if `label_last` empty: `last commit · <TIME>`. Else: Cortex `label_last`. |
-| Void panel (two lines)                              | `FACTS.largestGap.days` + `FACTS.largestGap.from/to`, formatted `MMM DAY` |
-| Caption sentence 1                                  | fixed: `Every dot is one commit, placed by the hour it landed.` |
-| Caption sentence 2                                  | `The last one was <TIME>, <MMM DAY>.`                    |
-| Author handle at foot-right                         | `FACTS.primaryAuthorLogin`                               |
-| Product mark, `READ BY SNOWFLAKE CORTEX`, corner rule | constants                                              |
-| Accent colour everywhere                            | Cortex `accent`                                          |
+| element on the card                                    | source                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Kicker slug prefix `ATLAS/PIPELINE — ` (accent)        | `REPO_OWNER/REPO_NAME`, uppercased                                        |
+| Kicker genre (neutral)                                 | Cortex `kicker`                                                           |
+| Header meta `<N> COMMITS · <VERB> <MMM DAY>`           | `FACTS.commitCount` + status verb map + `FACTS.lastCommitAt`              |
+| Headline (upright / italic / upright)                  | Cortex `headline_upright`, `headline_accent`, `headline_trail`            |
+| First-commit anchor `<TIME> · <DATE> — <label>`        | `FACTS.firstCommitAt` + Cortex `label_first`                              |
+| Pivot anchor (drawn only when `label_pivot` non-empty) | `pivotAt` + Cortex `label_pivot`                                          |
+| Last-commit anchor                                     | if `label_last` empty: `last commit · <TIME>`. Else: Cortex `label_last`. |
+| Void panel (two lines)                                 | `FACTS.largestGap.days` + `FACTS.largestGap.from/to`, formatted `MMM DAY` |
+| Caption sentence 1                                     | fixed: `Every dot is one commit, placed by the hour it landed.`           |
+| Caption sentence 2                                     | `The last one was <TIME>, <MMM DAY>.`                                     |
+| Author handle at foot-right                            | `FACTS.primaryAuthorLogin`                                                |
+| Product mark, `READ BY SNOWFLAKE CORTEX`, corner rule  | constants                                                                 |
+| Accent colour everywhere                               | Cortex `accent`                                                           |
 
 Status verb map (renderer):
 
-| `STATUS`     | header verb           |
-|---|---|
-| `abandoned`  | `ABANDONED SINCE`     |
-| `dormant`    | `QUIET SINCE`         |
-| `active`     | `LAST TOUCHED`        |
+| `STATUS`    | header verb       |
+| ----------- | ----------------- |
+| `abandoned` | `ABANDONED SINCE` |
+| `dormant`   | `QUIET SINCE`     |
+| `active`    | `LAST TOUCHED`    |
 
 Plot annotation pinning: the renderer matches `FACTS.firstCommitAt`, top-level `pivotAt`, and `FACTS.lastCommitAt` against `plot[].t` (exact `TO_VARCHAR(AUTHORED_AT)` string) to find the dots those anchors ride.
 

@@ -33,6 +33,34 @@ CREATE TABLE IF NOT EXISTS COMMITS (
 );
 ALTER TABLE COMMITS ADD COLUMN IF NOT EXISTS AUTHOR_LOGIN STRING;
 
+-- Lives here, not in read_repo.sql: a CREATE OR REPLACE there dropped every generated
+-- card on each deploy of the procedure. The gallery is meant to be pre-generated, and
+-- regenerating it costs a Cortex call per card. Change the card contract and you drop
+-- this table by hand, on purpose.
+CREATE TABLE IF NOT EXISTS CARDS (
+  REPO_OWNER       STRING       NOT NULL,
+  REPO_NAME        STRING       NOT NULL,
+  STORYLINE        STRING       NOT NULL,
+  SCORE            NUMBER(3,0),
+  STATUS           STRING,
+  PIVOT_AT         TIMESTAMP_TZ,
+  KICKER           STRING,
+  HEADLINE_UPRIGHT STRING,
+  HEADLINE_ACCENT  STRING,
+  HEADLINE_TRAIL   STRING,
+  LABEL_FIRST      STRING,
+  LABEL_PIVOT      STRING,
+  LABEL_LAST       STRING,
+  ACCENT           STRING,
+  ACCENT_REASON    STRING,
+  FACTS            VARIANT,
+  EVIDENCE         VARIANT,
+  PLOT             VARIANT,
+  MODEL            STRING,
+  CORTEX_QUERY_ID  STRING,
+  GENERATED_AT     TIMESTAMP_TZ
+);
+
 -- Hours are UTC, so the nocturne signal skews for non-UTC authors. Fixing it needs
 -- author offsets from the Git Data API.
 CREATE OR REPLACE VIEW COMMITS_CLEAN AS

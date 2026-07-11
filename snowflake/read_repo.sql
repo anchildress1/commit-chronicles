@@ -4,32 +4,7 @@ USE ROLE ACCOUNTADMIN;
 USE WAREHOUSE CHRONICLES_WH;
 USE SCHEMA CHRONICLES.RAW;
 
--- Replaced, not altered: the card contract changed shape (three-slot headline, no
--- label_void, no caption — both are pure facts now composed by the renderer).
--- Existing rows must be regenerated.
-CREATE OR REPLACE TABLE CARDS (
-  REPO_OWNER       STRING       NOT NULL,
-  REPO_NAME        STRING       NOT NULL,
-  STORYLINE        STRING       NOT NULL,
-  SCORE            NUMBER(3,0),
-  STATUS           STRING,
-  PIVOT_AT         TIMESTAMP_TZ,
-  KICKER           STRING,
-  HEADLINE_UPRIGHT STRING,
-  HEADLINE_ACCENT  STRING,
-  HEADLINE_TRAIL   STRING,
-  LABEL_FIRST      STRING,
-  LABEL_PIVOT      STRING,
-  LABEL_LAST       STRING,
-  ACCENT           STRING,
-  ACCENT_REASON    STRING,
-  FACTS            VARIANT,
-  EVIDENCE         VARIANT,
-  PLOT             VARIANT,
-  MODEL            STRING,
-  CORTEX_QUERY_ID  STRING,
-  GENERATED_AT     TIMESTAMP_TZ
-);
+-- CARDS is declared in schema.sql. Deploying this file must never drop a generated card.
 
 -- Full scatter for the renderer. Never sent to a model.
 -- t is the exact timestamp string so the renderer can pin annotations by matching

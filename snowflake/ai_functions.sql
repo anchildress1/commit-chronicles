@@ -101,17 +101,19 @@ $$
         ),
         -- Hitting max_tokens returns NULL, not an error. Keep the ceiling loose.
         model_parameters => {'temperature': 0, 'max_tokens': 1024},
+        -- No maxLength or pattern: unsupported by constrained decoding, and inside a UDF
+        -- the schema rejection surfaces as NULL, not an error. Lengths live in the prompt.
         response_format => PARSE_JSON('{
             "type": "json",
             "schema": {
                 "type": "object",
                 "properties": {
-                    "kicker":          {"type": "string", "maxLength": 40},
-                    "headline_lead":   {"type": "string", "maxLength": 40},
-                    "headline_accent": {"type": "string", "maxLength": 55},
-                    "thesis":          {"type": "string", "maxLength": 120},
-                    "accent":          {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
-                    "accent_reason":   {"type": "string", "maxLength": 60}
+                    "kicker":          {"type": "string"},
+                    "headline_lead":   {"type": "string"},
+                    "headline_accent": {"type": "string"},
+                    "thesis":          {"type": "string"},
+                    "accent":          {"type": "string"},
+                    "accent_reason":   {"type": "string"}
                 },
                 "required": ["kicker", "headline_lead", "headline_accent",
                              "thesis", "accent", "accent_reason"],

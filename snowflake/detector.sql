@@ -146,13 +146,26 @@ streaks AS (
         MAX(AUTHORED_DATE) AS STREAK_END
     FROM islands
     GROUP BY REPO_OWNER, REPO_NAME, ISLAND_KEY
+),
+-- The renderer pins the pivot by matching PIVOT_AT against an exact AUTHORED_AT in
+-- CARD_PLOT. Casting STREAK_END (a DATE) would land on midnight and match no commit.
+streak_close AS (
+    SELECT
+        s.REPO_OWNER, s.REPO_NAME, s.ISLAND_KEY,
+        MAX(c.AUTHORED_AT) AS CLOSED_AT
+    FROM streaks s
+    JOIN COMMITS_CLEAN c
+      ON  c.REPO_OWNER    = s.REPO_OWNER
+      AND c.REPO_NAME     = s.REPO_NAME
+      AND c.AUTHORED_DATE = s.STREAK_END
+    GROUP BY s.REPO_OWNER, s.REPO_NAME, s.ISLAND_KEY
 )
 SELECT
     s.REPO_OWNER,
     s.REPO_NAME,
     'binge'                       AS STORYLINE,
     LEAST(100, s.STREAK_DAYS * 4) AS SCORE,
-    TO_TIMESTAMP_TZ(s.STREAK_END) AS PIVOT_AT,
+    x.CLOSED_AT                   AS PIVOT_AT,
     OBJECT_CONSTRUCT(
         'streakDays',   s.STREAK_DAYS,
         'streakStart',  TO_VARCHAR(s.STREAK_START),
@@ -161,6 +174,7 @@ SELECT
         'activeDays',   f.ACTIVE_DAYS
     )                             AS EVIDENCE
 FROM streaks s
+JOIN streak_close x USING (REPO_OWNER, REPO_NAME, ISLAND_KEY)
 JOIN REPO_FACTS f USING (REPO_OWNER, REPO_NAME)
 CROSS JOIN DETECTOR_CONFIG cfg
 WHERE f.COMMIT_COUNT >= cfg.MIN_COMMITS

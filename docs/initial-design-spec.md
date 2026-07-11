@@ -27,11 +27,11 @@ Scope is **one repository**, not a whole profile. A profile year-in-review turns
 
 - **Product mark** — `Commit Chronicles`.
 - **Kicker** naming the genre — `the death of a side project`, `the one that came back`.
-- **Headline** — Didone serif, the second clause italic and in the accent color.
+- **Headline** — Didone serif, in three slots: upright, then an italic accent-colored fragment, then upright again. The italic run may start mid-sentence.
 - **The arc** — a beeswarm scatter: date across, hour of day down, rotated so night sits at the bottom of the frame. Daylight commits render hollow, night commits solid. Long quiet stretches render as a **void panel** you look straight through. The last commit is a single accent dot.
+- **Anchor labels** — a poetic tail on the first commit, the pivot, and the last commit. Only the anchors this storyline actually uses get one.
 - **Status** — an observed label: `abandoned` (no commits in N days), `shipped 1.0.1`, `active`.
 - **Counts** — commits, span.
-- **Thesis line** — one sentence about the shape of the history.
 - **Attribution** — `read by Snowflake Cortex`.
 
 If the card would work equally well as a bar chart, it has failed.

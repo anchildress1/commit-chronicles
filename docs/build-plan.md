@@ -82,9 +82,9 @@ Nine keys, all the writing on the card. The italic run sits inside sentence 2 �
 Cloud Run templates an SVG (1200×630) from the Cortex JSON plus the plotted commits, and writes it to the public GCS bucket.
 
 **Design:**
-- Didone headline with the italic half in the accent · mono kicker naming the genre · status label (`abandoned` / `shipped 1.0.1`).
+- Didone headline in three slots — upright, italic accent fragment, upright · mono kicker naming the genre · status label (`abandoned` / `shipped 1.0.1`).
 - **The arc is the card:** beeswarm scatter, date across and hour down, night at the bottom. Daylight commits hollow, night commits solid. The dead stretch is a **void panel** you look through. The final commit is one accent dot.
-- One thesis line at the foot. It **interprets** — that's the point.
+- Poetic tails pin to the anchors the storyline uses. The headline **interprets** — that's the point.
 
 ## Cost
 Detection is free SQL. Cortex sees ~20 commits, not thousands. Cloud Run scales to zero. Storage is a bucket. Ballpark: **lunch money, once.**
@@ -93,7 +93,7 @@ Detection is free SQL. Cortex sees ~20 commits, not thousands. Cloud Run scales 
 - **Fri night — THE GATE.** MCP + `snow` CLI connected. Prove two things: external access can reach `api.github.com` from inside a proc, and Cortex AISQL runs in your region. Nothing else matters until both are green.
 - **Sat AM** — `ingest_commits` → `COMMITS_RAW` for one handle.
 - **Sat PM** — detector SQL. Confirm it picks `my-hermantic-agent` (nocturne/collapse) and `rai-lint` (resurrection) unaided.
-- **Sun AM** — Cortex call (headline, thesis, accent) via `READ_REPO`; Cloud Run renders the SVG → GCS.
+- **Sun AM** — Cortex call (kicker, headline, anchor labels, accent) via `READ_REPO`; Cloud Run renders the SVG → GCS.
 - **Sun PM** — Cloud Run shell + `/api/generate`; confirm the card renders in a real README and the page embeds in a dev.to draft.
 - **Sun night** — writeup: the detector SQL, the Cortex call, the `snow` deploy. Cards are the demo.
 - **Mon early** — submit with buffer.

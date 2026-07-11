@@ -52,55 +52,18 @@ product spec.
 
 ### Stack
 
-- **Frontend**: Vite + React 19 SPA, TypeScript strict.
 - **Backend**: Cloud Run service for `/api/*` generation endpoints.
 - **Hosting/cache**: Firebase Hosting for the embed and Firestore for generated
   chronicle documents.
 - **AI/data engine**: Snowflake Cortex AISQL (`AI_CLASSIFY`, `AI_FILTER`, `AI_AGG`)
   used only on generation misses.
-- **Package manager**: pnpm (pinned via Volta). Node 24+.
-- **Tests**: Vitest (unit) + Playwright (e2e).
-
-### Layout
-
-- `src/` — React SPA (`main.tsx`, `App.tsx`).
-- `worker/` — Worker entrypoint + API routes.
-- `test/` — unit tests, mirroring source: `test/src/` for `src/`, `test/worker/`
-  for `worker/`. Not colocated with source files.
-- `e2e/` — Playwright specs.
-- `snowflake/` — warehouse/database/schema/table/view setup and the commit
-  load process (`schema.sql`).
-- `index.html` — Vite entry at repo root.
-
-### Commands
-
-Run everything through `make` (delegates to pnpm):
-
-| Command                             | Description                                         |
-| ----------------------------------- | --------------------------------------------------- |
-| `make install`                      | Install dependencies                                |
-| `make dev`                          | Start the Vite dev server (client + Worker)         |
-| `make format` / `make format-check` | Format / check formatting                           |
-| `make lint`                         | ESLint                                              |
-| `make typecheck`                    | `tsc -b --noEmit` across all project references     |
-| `make test`                         | Vitest unit tests with coverage                     |
-| `make e2e`                          | Playwright e2e tests                                |
-| `make perf`                         | Local Lighthouse (never CI)                         |
-| `make secret-scan`                  | gitleaks                                            |
-| `make build`                        | Production build                                    |
-| `make deploy`                       | Build, then `wrangler deploy`                       |
-| `make ai-checks`                    | format-check + lint + typecheck + test + actionlint |
-| `make clean`                        | Remove build + dependency artifacts                 |
 
 ## Test Standards
 
-- **Coverage thresholds**: 85% lines/functions/statements, 80% branches (enforced in
-  `vitest.config.ts`).
 - Every new component or utility ships with positive, negative, and edge-case tests.
 
 ## TypeScript Strictness
 
-- `strict: true` is enforced. Run `make typecheck` to verify.
 - Do not weaken strict settings or add `// @ts-ignore` without a justifying comment.
 
 ## Application Logic

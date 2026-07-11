@@ -145,15 +145,18 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
     )
 
     # Stage raw rows so IS_BOT / IS_AI_ASSISTED can be resolved in SQL, where the AI
-    # functions live. The temp table is session-scoped and each proc invocation runs
-    # in its own Cloud Run session; CREATE OR REPLACE handles the rare same-session
-    # reuse.
+    # functions live. INGEST_STAGE is declared in schema.sql: an owner's-rights
+    # procedure may not create a temporary table. Rows are scoped by repo, so two
+    # repos ingesting at once do not see each other.
+    session.table("INGEST_STAGE").delete(
+        (col("REPO_OWNER") == repo_owner) & (col("REPO_NAME") == repo_name)
+    )
     session.create_dataframe(
         rows,
         schema=["REPO_OWNER", "REPO_NAME", "SHA", "AUTHOR", "AUTHOR_LOGIN",
                 "GH_AUTHOR_TYPE", "GH_COMMITTER_TYPE", "EMAIL",
                 "SUBJECT", "BODY", "AUTHORED_AT", "COMMITTED_AT", "PARENT_COUNT"],
-    ).write.mode("overwrite").save_as_table("INGEST_STAGE", table_type="temporary")
+    ).write.mode("append").save_as_table("INGEST_STAGE", column_order="name")
 
     # Two-stage classification. Cost math:
     #   Bot: |distinct ambiguous authors|, usually 0 in a well-attributed repo.
@@ -166,7 +169,7 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
             IS_BOT, IS_AI_ASSISTED
         )
         WITH staged AS (
-            SELECT * FROM INGEST_STAGE
+            SELECT * FROM INGEST_STAGE WHERE REPO_OWNER = ? AND REPO_NAME = ?
         ),
         signals AS (
             SELECT
@@ -241,7 +244,11 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
         LEFT JOIN ai_bot_verdicts a
             ON  COALESCE(s.AUTHOR, '') = a.AUTHOR_KEY
             AND COALESCE(s.EMAIL, '')  = a.EMAIL_KEY;
-    ''').collect()
+    ''', params=[repo_owner, repo_name]).collect()
+
+    session.table("INGEST_STAGE").delete(
+        (col("REPO_OWNER") == repo_owner) & (col("REPO_NAME") == repo_name)
+    )
 
     return {"status": "ready", "repo": repo_slug, "commitCount": len(rows)}
 $$;

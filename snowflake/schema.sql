@@ -61,6 +61,25 @@ CREATE TABLE IF NOT EXISTS CARDS (
   GENERATED_AT     TIMESTAMP_TZ
 );
 
+-- An owner's-rights procedure cannot create a temporary table, so the ingest stages raw
+-- rows here and classifies them in SQL, where AI_CLASSIFY and AI_FILTER live. Rows are
+-- scoped by repo and deleted once classified; nothing is meant to survive a run.
+CREATE TRANSIENT TABLE IF NOT EXISTS INGEST_STAGE (
+  REPO_OWNER        STRING,
+  REPO_NAME         STRING,
+  SHA               STRING,
+  AUTHOR            STRING,
+  AUTHOR_LOGIN      STRING,
+  GH_AUTHOR_TYPE    STRING,
+  GH_COMMITTER_TYPE STRING,
+  EMAIL             STRING,
+  SUBJECT           STRING,
+  BODY              STRING,
+  AUTHORED_AT       STRING,
+  COMMITTED_AT      STRING,
+  PARENT_COUNT      NUMBER(2,0)
+);
+
 -- Hours are UTC, so the nocturne signal skews for non-UTC authors. Fixing it needs
 -- author offsets from the Git Data API.
 CREATE OR REPLACE VIEW COMMITS_CLEAN AS

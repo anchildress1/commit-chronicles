@@ -17,7 +17,9 @@ USE WAREHOUSE CHRONICLES_WH;
 USE SCHEMA CHRONICLES.RAW;
 
 -- 1. The generated cards. One row per repo; Cloud Run reads this and renders.
-CREATE OR REPLACE TABLE CARDS (
+-- IF NOT EXISTS, never OR REPLACE: every row in here was paid for in Cortex tokens, and
+-- dropping the table to redeploy a procedure would silently bill the whole gallery again.
+CREATE TABLE IF NOT EXISTS CARDS (
   REPO_OWNER      STRING       NOT NULL,
   REPO_NAME       STRING       NOT NULL,
   STORYLINE       STRING       NOT NULL,
@@ -60,8 +62,9 @@ LANGUAGE SQL
 AS
 $$
 DECLARE
-    hits   INTEGER DEFAULT 0;
-    result VARIANT DEFAULT NULL;
+    hits      INTEGER DEFAULT 0;
+    storyline STRING  DEFAULT NULL;
+    result    VARIANT DEFAULT NULL;
 BEGIN
     SELECT COUNT(*) INTO :hits
       FROM CARD_EVIDENCE
@@ -78,6 +81,68 @@ BEGIN
     DELETE FROM CARDS
      WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO;
 
+    SELECT STORYLINE INTO :storyline
+      FROM REPO_STORYLINE
+     WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO;
+
+    -- A repo with no storyline has nothing for Cortex to read, so Cortex is not asked.
+    -- Paying for an inference call to be told a repo is unremarkable is the exact bill
+    -- the cost guards exist to prevent, and the card would be a lie either way: the spec
+    -- says a quiet history gets an honest template, not manufactured drama.
+    IF (storyline = 'none') THEN
+        INSERT INTO CARDS (
+            REPO_OWNER, REPO_NAME, STORYLINE, SCORE, STATUS,
+            KICKER, HEADLINE_LEAD, HEADLINE_ACCENT, THESIS, ACCENT, ACCENT_REASON,
+            FACTS, EVIDENCE, PLOT, MODEL, GENERATED_AT
+        )
+        SELECT
+            w.REPO_OWNER, w.REPO_NAME, 'none', 0,
+            CASE
+                WHEN w.FACTS:daysSinceLast::NUMBER >= 90 THEN 'abandoned'
+                WHEN w.FACTS:daysSinceLast::NUMBER >= 30 THEN 'dormant'
+                ELSE 'active'
+            END,
+            'no story here',
+            w.FACTS:commitCount::STRING || ' commits.',
+            'They do not add up to anything.',
+            'The history is too quiet to argue with.',
+            '#6b7280',
+            'grey, for a history with nothing to say',
+            w.FACTS,
+            OBJECT_CONSTRUCT(),
+            p.PLOT,
+            'none',                       -- no model ran
+            CURRENT_TIMESTAMP()
+        FROM REPO_STORYLINE w
+        JOIN CARD_PLOT p USING (REPO_OWNER, REPO_NAME)
+        WHERE w.REPO_OWNER = :P_OWNER AND w.REPO_NAME = :P_REPO;
+
+        SELECT OBJECT_CONSTRUCT(
+                   'status',       'ready',
+                   'repo',         REPO_OWNER || '/' || REPO_NAME,
+                   'storyline',    STORYLINE,
+                   'score',        SCORE,
+                   'statusLabel',  STATUS,
+                   'kicker',       KICKER,
+                   'headlineLead', HEADLINE_LEAD,
+                   'headlineAccent', HEADLINE_ACCENT,
+                   'thesis',       THESIS,
+                   'accent',       ACCENT,
+                   'accentReason', ACCENT_REASON,
+                   'facts',        FACTS,
+                   'evidence',     EVIDENCE,
+                   'plot',         PLOT,
+                   'model',        MODEL,
+                   'cortexQueryId', NULL,
+                   'generatedAt',  TO_VARCHAR(GENERATED_AT)
+               )
+          INTO :result
+          FROM CARDS
+         WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO;
+
+        RETURN :result;
+    END IF;
+
     INSERT INTO CARDS (
         REPO_OWNER, REPO_NAME, STORYLINE, SCORE, STATUS,
         KICKER, HEADLINE_LEAD, HEADLINE_ACCENT, THESIS, ACCENT, ACCENT_REASON,
@@ -93,23 +158,7 @@ BEGIN
                 WHEN e.FACTS:daysSinceLast::NUMBER >= 90 THEN 'abandoned'
                 WHEN e.FACTS:daysSinceLast::NUMBER >= 30 THEN 'dormant'
                 ELSE 'active'
-            END AS STATUS,
-            -- Every number spelled out and labelled in prose, rather than handed over as
-            -- a JSON blob. Given {"commitCount":56,"nightCommits":47} the model wrote
-            -- "fifty-six commits after midnight" — it grabbed an adjacent integer and
-            -- captioned it wrong. Naming each number in the sentence it belongs to costs
-            -- nothing and removes the failure mode.
-            'This repository has ' || e.FACTS:commitCount::STRING || ' commits in total.'
-            || ' Of those, ' || e.FACTS:nightCommits::STRING || ' were authored at night'
-            || ' (22:00-04:59 UTC).'
-            || ' ' || e.FACTS:aiAssistedCommits::STRING || ' carry an AI-assistance trailer.'
-            || ' They were written by ' || e.FACTS:authorCount::STRING || ' author(s)'
-            || ' across ' || e.FACTS:activeDays::STRING || ' active days,'
-            || ' spanning ' || e.FACTS:spanDays::STRING || ' days'
-            || ' from ' || e.FACTS:firstCommitAt::STRING
-            || ' to ' || e.FACTS:lastCommitAt::STRING || '.'
-            || ' The most recent commit was ' || e.FACTS:daysSinceLast::STRING || ' days ago.'
-                AS FACT_SHEET
+            END AS STATUS
         FROM CARD_EVIDENCE e
         JOIN CARD_PLOT p USING (REPO_OWNER, REPO_NAME)
         WHERE e.REPO_OWNER = :P_OWNER AND e.REPO_NAME = :P_REPO
@@ -122,7 +171,15 @@ BEGIN
             CHRONICLE_CARD(
                 i.STORYLINE,
                 i.STATUS,
-                i.FACT_SHEET,
+                i.FACTS:commitCount::STRING,
+                i.FACTS:nightCommits::STRING,
+                i.FACTS:aiAssistedCommits::STRING,
+                i.FACTS:authorCount::STRING,
+                i.FACTS:activeDays::STRING,
+                i.FACTS:spanDays::STRING,
+                i.FACTS:daysSinceLast::STRING,
+                i.FACTS:firstCommitAt::STRING,
+                i.FACTS:lastCommitAt::STRING,
                 TO_JSON(i.EVIDENCE),
                 TO_JSON(i.COMMITS)
             ) AS CARD

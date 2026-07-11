@@ -29,7 +29,14 @@ DROP FUNCTION IF EXISTS CHRONICLE_ACCENT(VARCHAR, VARCHAR, VARCHAR);
 -- CREATE_AI_FUNCTION has no OR REPLACE. Without this drop, redeploying leaves the OLD
 -- prompt in place and the file lies about what is running — which cost an entire
 -- debugging cycle already. Drop, then create.
+--
+-- Both signatures: the earlier build took a single facts blob (5 args). Snowflake
+-- overloads on arity, so dropping only the current one would strand the old function
+-- alive and callable.
 DROP FUNCTION IF EXISTS CHRONICLE_CARD(VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR);
+DROP FUNCTION IF EXISTS CHRONICLE_CARD(
+    VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR,
+    VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR);
 
 -- The card, read off the winning thread in one constrained call.
 --
@@ -71,12 +78,36 @@ CALL SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION(
     || 'a summer"; headline "It was rebuilt beautifully." / "It never once ran in production."; '
     || 'thesis "Every commit was a fresh start, which is another way of saying none of them '
     || 'finished."; accent "#8a6d3b", "rust, for something that oxidised in place".',
-    'Storyline: {storyline}\nStatus: {status}\nFacts: {facts}\nEvidence: {evidence}\nCommits: {commits}',
-    [ {'name': 'storyline', 'type': 'string'},
-      {'name': 'status',    'type': 'string'},
-      {'name': 'facts',     'type': 'string'},
-      {'name': 'evidence',  'type': 'string'},
-      {'name': 'commits',   'type': 'string'} ],
+    -- Each number arrives as its own input and is labelled here, in the prompt template,
+    -- rather than as one JSON blob. Handed {"commitCount":56,"nightCommits":47} the model
+    -- wrote "fifty-six commits after midnight" — it read an adjacent integer and captioned
+    -- it wrong. Labelling belongs in the template; the SQL layer passes values, not prose.
+    'Storyline: {storyline}'
+    || '\nStatus: {status}'
+    || '\nTotal commits: {total_commits}'
+    || '\nOf those, commits authored at night (22:00-04:59 UTC): {night_commits}'
+    || '\nOf those, commits naming an AI tool: {ai_assisted_commits}'
+    || '\nDistinct authors: {author_count}'
+    || '\nDays with at least one commit: {active_days}'
+    || '\nDays from first commit to last: {span_days}'
+    || '\nDays since the most recent commit: {days_since_last}'
+    || '\nFirst commit at: {first_commit_at}'
+    || '\nLast commit at: {last_commit_at}'
+    || '\nEvidence for this storyline: {evidence}'
+    || '\nCommit messages from the winning thread: {commits}',
+    [ {'name': 'storyline',           'type': 'string'},
+      {'name': 'status',              'type': 'string'},
+      {'name': 'total_commits',       'type': 'string'},
+      {'name': 'night_commits',       'type': 'string'},
+      {'name': 'ai_assisted_commits', 'type': 'string'},
+      {'name': 'author_count',        'type': 'string'},
+      {'name': 'active_days',         'type': 'string'},
+      {'name': 'span_days',           'type': 'string'},
+      {'name': 'days_since_last',     'type': 'string'},
+      {'name': 'first_commit_at',     'type': 'string'},
+      {'name': 'last_commit_at',      'type': 'string'},
+      {'name': 'evidence',            'type': 'string'},
+      {'name': 'commits',             'type': 'string'} ],
     [ {'name': 'kicker',          'type': 'string', 'description': 'lowercase phrase naming the genre of the story in plain English, max 40 chars; must NOT be the storyline keyword itself'},
       {'name': 'headline_lead',   'type': 'string', 'description': 'first headline clause, set upright, max 40 chars'},
       {'name': 'headline_accent', 'type': 'string', 'description': 'second headline clause, set italic and in the accent colour, max 55 chars'},
@@ -87,5 +118,5 @@ CALL SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION(
     NULL, NULL
 );
 
--- Smoke test — one call, whole card:
--- SELECT CHRONICLE_CARD('collapse', 'abandoned', '{"commitCount":56}', '{"lastCommitHour":3}', '[]');
+-- No smoke test here on purpose. Invoking this function costs Cortex tokens; a card is
+-- generated once, through READ_REPO, on a real cache miss. It is not a thing to poke at.

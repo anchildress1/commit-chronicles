@@ -63,13 +63,20 @@ Floors (minimum real commits) keep bots and noise from winning. Deterministic �
 Feed **only the winning thread's evidence** — ~10–20 real commit messages plus the computed facts. It returns:
 ```json
 { "kicker": "the death of a side project",
-  "headline": "Born in daylight. Died at 3:53 in the morning.",
-  "thesis": "It didn't slow down. It got later, and later, and then it stopped.",
-  "status": "abandoned",
+  "headline_upright": "Born in daylight. Last touched at",
+  "headline_accent": "3:53 in the morning",
+  "headline_trail": ".",
+  "label_first": "it begins",
+  "label_pivot": "",
+  "label_last": "",
   "accent": "#e2695e",
   "accent_reason": "ember, for a thing that burned out" }
 ```
-**Cortex picks the palette.** The color is a judgment about the arc, not a brand constant — a project that died and one that shipped must not wear the same color.
+Nine keys, all the writing on the card. The italic run sits inside sentence 2 — `headline_upright` is upright, `headline_accent` is italic and in the accent colour, `headline_trail` is upright again. Empty labels for the anchors this storyline doesn't use (a collapse has no separate pivot; a non-active repo doesn't get a poetic label on the last commit).
+
+**Cortex picks the palette.** One `accent` hex paints every accent-coloured element on the card — kicker slug, italic headline fragment, last-commit dot, arrow, void-panel rule, attribution bullet. A project that died and one that shipped must not wear the same colour.
+
+**Renderer owns the facts.** Kicker slug prefix, header meta (`59 COMMITS · QUIET SINCE FEB 25`), first/last-commit anchor prefixes, void-panel text, caption, author handle — all composed from `FACTS`, `STATUS`, `PIVOT_AT`, and the `PLOT` array. See the Ownership section in `docs/initial-design-spec.md` for the full split.
 
 ## Stage 3 — the card
 Cloud Run templates an SVG (1200×630) from the Cortex JSON plus the plotted commits, and writes it to the public GCS bucket.

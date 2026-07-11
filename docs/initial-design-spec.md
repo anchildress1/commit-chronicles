@@ -151,17 +151,56 @@ One call, fed **only the winning storyline's evidence**: ~10–20 real commit me
 ```json
 {
   "kicker": "the death of a side project",
-  "headline": "Born in daylight. Its last commit landed at 3:53 in the morning.",
-  "thesis": "The commits got later and later, and then they stopped.",
-  "status": "abandoned",
+  "headline_upright": "Born in daylight. Last touched at",
+  "headline_accent": "3:53 in the morning",
+  "headline_trail": ".",
+  "label_first": "it begins",
+  "label_pivot": "",
+  "label_last": "",
   "accent": "#e2695e",
   "accent_reason": "ember — a repo that ran hot and went out"
 }
 ```
 
-**Cortex chooses the palette.** The accent is a reading of the arc, not a brand constant: a repo that went quiet and a repo that came back and shipped must not wear the same color.
+Nine keys. That is the whole surface area of the writing on the card.
+
+**The italic run is a fragment, not a clause.** The renderer sets `headline_upright` upright, `headline_accent` italic and in the accent colour, `headline_trail` upright again. The italic can start mid-sentence — that's the design. Punctuation may live in `accent` or `trail`; put it where the typography looks right.
+
+**Cortex chooses the palette.** One `accent` hex paints every accent-coloured element on the card: kicker slug, italic headline fragment, last-commit dot, arrow, void-panel rule, attribution bullet. It is a reading of the arc, not a brand constant: a repo that went quiet and a repo that came back and shipped must not wear the same colour.
+
+**Not every storyline uses every anchor.** The detector picks the storyline first and only the anchors that storyline actually uses get labelled. `label_pivot` is empty for a collapse (no separate pivot from the last commit). `label_last` is empty unless the repo is still active — for abandoned or dormant repos the renderer prints `"last commit · <time>"` and adding a poetic tail on top reads as filler.
 
 Narration constraints: use only the supplied facts and invent nothing — then say what they mean (see Voice rules).
+
+### Ownership: renderer vs Cortex
+
+Cortex writes the words the reader hears in the author's voice. The renderer composes everything else from `FACTS`, `STATUS`, `PIVOT_AT`, and the `PLOT` array. Do not teach Cortex to produce any of these.
+
+| element on the card                                 | source                                                   |
+|---|---|
+| Kicker slug prefix `ATLAS/PIPELINE — ` (accent)     | `REPO_OWNER/REPO_NAME`, uppercased                       |
+| Kicker genre (neutral)                              | Cortex `kicker`                                          |
+| Header meta `<N> COMMITS · <VERB> <MMM DAY>`        | `FACTS.commitCount` + status verb map + `FACTS.lastCommitAt` |
+| Headline (upright / italic / upright)               | Cortex `headline_upright`, `headline_accent`, `headline_trail` |
+| First-commit anchor `<TIME> · <DATE> — <label>`     | `FACTS.firstCommitAt` + Cortex `label_first`             |
+| Pivot anchor (drawn only when `label_pivot` non-empty) | `pivotAt` + Cortex `label_pivot`                       |
+| Last-commit anchor                                  | if `label_last` empty: `last commit · <TIME>`. Else: Cortex `label_last`. |
+| Void panel (two lines)                              | `FACTS.largestGap.days` + `FACTS.largestGap.from/to`, formatted `MMM DAY` |
+| Caption sentence 1                                  | fixed: `Every dot is one commit, placed by the hour it landed.` |
+| Caption sentence 2                                  | `The last one was <TIME>, <MMM DAY>.`                    |
+| Author handle at foot-right                         | `FACTS.primaryAuthorLogin`                               |
+| Product mark, `READ BY SNOWFLAKE CORTEX`, corner rule | constants                                              |
+| Accent colour everywhere                            | Cortex `accent`                                          |
+
+Status verb map (renderer):
+
+| `STATUS`     | header verb           |
+|---|---|
+| `abandoned`  | `ABANDONED SINCE`     |
+| `dormant`    | `QUIET SINCE`         |
+| `active`     | `LAST TOUCHED`        |
+
+Plot annotation pinning: the renderer matches `FACTS.firstCommitAt`, top-level `pivotAt`, and `FACTS.lastCommitAt` against `plot[].t` (exact `TO_VARCHAR(AUTHORED_AT)` string) to find the dots those anchors ride.
 
 ## Why it wins "Best use of Snowflake"
 

@@ -105,19 +105,26 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
     if repo_resp.json().get("private"):
         return {"status": "failed", "errorCode": "repo_private", "repo": repo_slug}
 
+    # Fetch one more than max_commits: if that many actually come back, the
+    # repo has more history than the cap allows. Reject as oversized instead
+    # of silently inserting a truncated (and misleadingly "ready") history.
+    fetch_target = max_commits + 1
+
     rows = []
     page = 1
     per_page = 100
     base_params = {"per_page": per_page}
     if ref:
         base_params["sha"] = ref
-    while len(rows) < max_commits:
+    while len(rows) < fetch_target:
         resp = requests.get(
             f"{GITHUB_API}/repos/{repo_slug}/commits",
             headers=headers,
             params={**base_params, "page": page},
             timeout=10,
         )
+        if resp.status_code == 409:
+            return {"status": "failed", "errorCode": "repo_empty", "repo": repo_slug}
         resp.raise_for_status()
         batch = resp.json()
         if not batch:
@@ -146,12 +153,14 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
                 is_bot,
                 is_ai_assisted,
             ))
-            if len(rows) >= max_commits:
+            if len(rows) >= fetch_target:
                 break
         page += 1
 
     if not rows:
         return {"status": "failed", "errorCode": "repo_empty", "repo": repo_slug}
+    if len(rows) > max_commits:
+        return {"status": "failed", "errorCode": "repo_oversized", "repo": repo_slug, "commitCap": max_commits}
 
     session.table("COMMITS").delete((col("REPO_OWNER") == repo_owner) & (col("REPO_NAME") == repo_name))
     session.create_dataframe(

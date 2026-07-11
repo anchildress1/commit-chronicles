@@ -75,9 +75,12 @@ LANGUAGE SQL
 AS
 $$
 DECLARE
-    hits      INTEGER DEFAULT 0;
-    storyline STRING  DEFAULT NULL;
-    result    VARIANT DEFAULT NULL;
+    hits            INTEGER DEFAULT 0;
+    storyline       STRING  DEFAULT NULL;
+    result          VARIANT DEFAULT NULL;
+    card            VARIANT DEFAULT NULL;
+    cortex_query_id STRING  DEFAULT NULL;
+    reasons         ARRAY   DEFAULT ARRAY_CONSTRUCT();
 BEGIN
     SELECT COUNT(*) INTO :hits
       FROM CARD_EVIDENCE
@@ -164,89 +167,138 @@ BEGIN
         RETURN :result;
     END IF;
 
-    INSERT INTO CARDS (
-        REPO_OWNER, REPO_NAME, STORYLINE, SCORE, STATUS, PIVOT_AT,
-        KICKER, HEADLINE_UPRIGHT, HEADLINE_ACCENT, HEADLINE_TRAIL,
-        LABEL_FIRST, LABEL_PIVOT, LABEL_LAST,
-        ACCENT, ACCENT_REASON,
-        FACTS, EVIDENCE, PLOT, MODEL, GENERATED_AT
-    )
-    WITH input AS (
-        SELECT
-            e.REPO_OWNER, e.REPO_NAME, e.STORYLINE, e.SCORE, e.PIVOT_AT,
-            e.FACTS, e.EVIDENCE, e.COMMITS, p.PLOT,
-            CASE
-                WHEN e.FACTS:daysSinceLast::NUMBER >= 90 THEN 'abandoned'
-                WHEN e.FACTS:daysSinceLast::NUMBER >= 30 THEN 'dormant'
-                ELSE 'active'
-            END AS STATUS
-        FROM CARD_EVIDENCE e
-        JOIN CARD_PLOT p USING (REPO_OWNER, REPO_NAME)
-        WHERE e.REPO_OWNER = :P_OWNER AND e.REPO_NAME = :P_REPO
-    ),
-    narrated AS (
-        SELECT
-            i.*,
-            CHRONICLE_CARD(
-                i.STORYLINE,
-                i.STATUS,
-                i.FACTS:commitCount::STRING,
-                i.FACTS:nightCommits::STRING,
-                i.FACTS:aiAssistedCommits::STRING,
-                i.FACTS:authorCount::STRING,
-                i.FACTS:activeDays::STRING,
-                i.FACTS:spanDays::STRING,
-                i.FACTS:daysSinceLast::STRING,
-                i.FACTS:firstCommitAt::STRING,
-                i.FACTS:firstCommitSubject::STRING,
-                i.FACTS:lastCommitAt::STRING,
-                i.FACTS:lastCommitSubject::STRING,
-                TO_VARCHAR(i.PIVOT_AT),
-                i.FACTS:largestGap:days::STRING,
-                i.FACTS:largestGap:from::STRING,
-                i.FACTS:largestGap:to::STRING,
-                TO_JSON(i.EVIDENCE),
-                TO_JSON(i.COMMITS)
-            ) AS CARD
-        FROM input i
-    )
+    -- Cortex path. Call CHRONICLE_CARD exactly once and capture the whole row into
+    -- :card so the empty-response guard, the reject checks, and the INSERT all read the
+    -- same values without re-billing the model. Repairs (label_pivot / label_last
+    -- forced to '') are applied in the INSERT below because they are conditional on
+    -- table-side facts, not free-form model output.
     SELECT
-        REPO_OWNER, REPO_NAME, STORYLINE, SCORE, STATUS, PIVOT_AT,
-        CARD:kicker::STRING,
-        CARD:headline_upright::STRING,
-        CARD:headline_accent::STRING,
-        CARD:headline_trail::STRING,
-        CARD:label_first::STRING,
-        CARD:label_pivot::STRING,
-        CARD:label_last::STRING,
-        CARD:accent::STRING,
-        CARD:accent_reason::STRING,
-        FACTS, EVIDENCE, PLOT,
-        'claude-sonnet-4-5',
-        CURRENT_TIMESTAMP()
-    FROM narrated;
+        OBJECT_CONSTRUCT(
+            'storyline',   e.STORYLINE,
+            'score',       e.SCORE,
+            'status',      CASE
+                               WHEN e.FACTS:daysSinceLast::NUMBER >= 90 THEN 'abandoned'
+                               WHEN e.FACTS:daysSinceLast::NUMBER >= 30 THEN 'dormant'
+                               ELSE 'active'
+                           END,
+            'pivotAt',     TO_VARCHAR(e.PIVOT_AT),
+            'pivotEqLast', (e.PIVOT_AT IS NULL
+                            OR e.PIVOT_AT = e.FACTS:lastCommitAt::TIMESTAMP_TZ),
+            'facts',       e.FACTS,
+            'evidence',    e.EVIDENCE,
+            'plot',        p.PLOT,
+            'ai',          CHRONICLE_CARD(
+                               e.STORYLINE,
+                               CASE
+                                   WHEN e.FACTS:daysSinceLast::NUMBER >= 90 THEN 'abandoned'
+                                   WHEN e.FACTS:daysSinceLast::NUMBER >= 30 THEN 'dormant'
+                                   ELSE 'active'
+                               END,
+                               e.FACTS:commitCount::STRING,
+                               e.FACTS:nightCommits::STRING,
+                               e.FACTS:aiAssistedCommits::STRING,
+                               e.FACTS:authorCount::STRING,
+                               e.FACTS:activeDays::STRING,
+                               e.FACTS:spanDays::STRING,
+                               e.FACTS:daysSinceLast::STRING,
+                               e.FACTS:firstCommitAt::STRING,
+                               e.FACTS:firstCommitSubject::STRING,
+                               e.FACTS:lastCommitAt::STRING,
+                               e.FACTS:lastCommitSubject::STRING,
+                               TO_VARCHAR(e.PIVOT_AT),
+                               e.FACTS:largestGap:days::STRING,
+                               e.FACTS:largestGap:from::STRING,
+                               e.FACTS:largestGap:to::STRING,
+                               TO_JSON(e.EVIDENCE),
+                               TO_JSON(e.COMMITS)
+                           )
+        )
+      INTO :card
+      FROM CARD_EVIDENCE e
+      JOIN CARD_PLOT p USING (REPO_OWNER, REPO_NAME)
+     WHERE e.REPO_OWNER = :P_OWNER AND e.REPO_NAME = :P_REPO;
 
-    UPDATE CARDS
-       SET CORTEX_QUERY_ID = LAST_QUERY_ID()
-     WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO;
+    SELECT LAST_QUERY_ID() INTO :cortex_query_id;
 
-    -- A structured Cortex response that hits max_tokens returns NULL, not an error.
-    -- Empty-string labels are legal (label_last is "" unless active); NULL is the
-    -- signal that the constrained decode failed.
-    SELECT COUNT(*) INTO :hits
-      FROM CARDS
-     WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO
-       AND (KICKER IS NULL OR HEADLINE_UPRIGHT IS NULL OR HEADLINE_ACCENT IS NULL
-            OR HEADLINE_TRAIL IS NULL OR ACCENT IS NULL);
-
-    IF (hits > 0) THEN
-        DELETE FROM CARDS WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO;
+    -- Empty-response guard: constrained decode returns NULL when the model hits
+    -- max_tokens or the schema rejects the draft.
+    IF (:card:ai IS NULL
+        OR :card:ai:kicker           IS NULL
+        OR :card:ai:headline_upright IS NULL
+        OR :card:ai:headline_accent  IS NULL
+        OR :card:ai:headline_trail   IS NULL
+        OR :card:ai:accent           IS NULL) THEN
         RETURN OBJECT_CONSTRUCT(
             'status',    'failed',
             'errorCode', 'cortex_empty',
             'repo',      :P_OWNER || '/' || :P_REPO
         );
     END IF;
+
+    -- Reject guard: rules that SQL can check for free. Repairs (empty-when) are NOT
+    -- rejects — they get applied in the INSERT. These are the cases where the model
+    -- misbehaved badly enough that the card would misrender or lie: bad hex, over-
+    -- length text that would break the frame, facts leaking into the poetic tails,
+    -- kicker echoing the storyline keyword.
+    SELECT ARRAY_COMPACT(ARRAY_CONSTRUCT(
+        IFF(NOT REGEXP_LIKE(:card:ai:accent::STRING, '^#[0-9a-fA-F]{6}$'),
+            'accent_hex_invalid', NULL),
+        IFF(LENGTH(:card:ai:kicker::STRING)           > 40, 'kicker_too_long',           NULL),
+        IFF(LENGTH(:card:ai:headline_upright::STRING) > 45, 'headline_upright_too_long', NULL),
+        IFF(LENGTH(:card:ai:headline_accent::STRING)  > 55, 'headline_accent_too_long',  NULL),
+        IFF(LENGTH(:card:ai:headline_trail::STRING)   > 5,  'headline_trail_too_long',   NULL),
+        IFF(LENGTH(:card:ai:label_first::STRING)      > 30, 'label_first_too_long',      NULL),
+        IFF(LENGTH(:card:ai:label_pivot::STRING)      > 30, 'label_pivot_too_long',      NULL),
+        IFF(LENGTH(:card:ai:label_last::STRING)       > 30, 'label_last_too_long',       NULL),
+        IFF(LENGTH(:card:ai:accent_reason::STRING)    > 60, 'accent_reason_too_long',    NULL),
+        IFF(:card:ai:label_first::STRING RLIKE '.*[0-9].*', 'label_first_has_digits',  NULL),
+        IFF(:card:ai:label_pivot::STRING RLIKE '.*[0-9].*', 'label_pivot_has_digits',  NULL),
+        IFF(:card:ai:label_last::STRING  RLIKE '.*[0-9].*', 'label_last_has_digits',   NULL),
+        IFF(LOWER(:card:ai:kicker::STRING) IN
+                ('relapse','nocturne','binge','collapse','fight','resurrection'),
+            'kicker_echoes_storyline', NULL)
+    )) INTO :reasons;
+
+    IF (ARRAY_SIZE(:reasons) > 0) THEN
+        RETURN OBJECT_CONSTRUCT(
+            'status',    'failed',
+            'errorCode', 'cortex_rejected',
+            'repo',      :P_OWNER || '/' || :P_REPO,
+            'reasons',   :reasons,
+            'received',  :card:ai
+        );
+    END IF;
+
+    -- Card passes all guards. INSERT with the two conditional-empty repairs applied.
+    INSERT INTO CARDS (
+        REPO_OWNER, REPO_NAME, STORYLINE, SCORE, STATUS, PIVOT_AT,
+        KICKER, HEADLINE_UPRIGHT, HEADLINE_ACCENT, HEADLINE_TRAIL,
+        LABEL_FIRST, LABEL_PIVOT, LABEL_LAST,
+        ACCENT, ACCENT_REASON,
+        FACTS, EVIDENCE, PLOT, MODEL, CORTEX_QUERY_ID, GENERATED_AT
+    )
+    SELECT
+        :P_OWNER,
+        :P_REPO,
+        :card:storyline::STRING,
+        :card:score::NUMBER(3,0),
+        :card:status::STRING,
+        TO_TIMESTAMP_TZ(:card:pivotAt::STRING),
+        :card:ai:kicker::STRING,
+        :card:ai:headline_upright::STRING,
+        :card:ai:headline_accent::STRING,
+        :card:ai:headline_trail::STRING,
+        :card:ai:label_first::STRING,
+        IFF(:card:pivotEqLast::BOOLEAN, '', :card:ai:label_pivot::STRING),
+        IFF(:card:status::STRING <> 'active', '', :card:ai:label_last::STRING),
+        :card:ai:accent::STRING,
+        :card:ai:accent_reason::STRING,
+        :card:facts,
+        :card:evidence,
+        :card:plot,
+        'claude-sonnet-4-5',
+        :cortex_query_id,
+        CURRENT_TIMESTAMP();
 
     SELECT OBJECT_CONSTRUCT(
                'status',          'ready',

@@ -1,0 +1,11 @@
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npx --no-install commitlint --edit {1}
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: actionlint
+      glob: ".github/workflows/*.yml"
+      run: actionlint {staged_files}

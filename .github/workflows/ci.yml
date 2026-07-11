@@ -46,7 +46,18 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload coverage
+      # Runs even when the tests fail: a red build is exactly when the coverage delta is
+      # worth looking at, and Codecov is the only place that shows it per line.
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: coverage/lcov.info
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage artifact
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: coverage

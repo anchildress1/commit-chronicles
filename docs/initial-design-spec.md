@@ -84,21 +84,21 @@ The Snowflake Marketplace archive is not used in V1. This product is about one s
 ## Architecture
 
 ```text
-Cloud Run  (SPA + /api/generate + /card.svg — no analysis logic)
-   │  POST /api/generate → write generating → invoke Snowflake proc
+Cloud Run  (static SPA + /api/generate — no analysis logic)
+   │  POST /api/generate → invoke Snowflake proc
    ▼
 Snowflake
-   ├─ ingest proc   external access → api.github.com → COMMITS_RAW
+   ├─ ingest proc   external access → api.github.com → COMMITS
    ├─ detector      plain SQL → score storylines → pick ONE
    ├─ cortex        narrate that thread + choose the palette
-   └─ payload       → back to Firestore as `ready`
+   └─ card proc     renders SVG → writes to the GCS stage
    │
-Firestore  (cache of record; serving every cached page + card)
+Public GCS bucket  (serving every cached page + card; the file's existence is the state)
 ```
 
-- **Cloud Run** owns the routes and all privileged writes. It fetches nothing and analyses nothing.
+- **Cloud Run** owns the routes, calls one Snowflake proc, and polls the bucket. It fetches nothing, computes nothing, and stores nothing.
 - **Snowflake** reaches GitHub itself, via an external access integration. The ingest layer is a stored procedure, not a service.
-- **Firestore** is the cache of record. A cached page or card never re-runs Cortex.
+- **The GCS bucket** is the cache of record. A cached page or card never re-runs Cortex.
 
 Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are RBAC-gated and hand a browser a login page. Cloud Run serves the card.
 

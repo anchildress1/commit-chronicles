@@ -32,7 +32,8 @@ CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION GITHUB_API_ACCESS
 CREATE OR REPLACE PROCEDURE INGEST_REPO_COMMITS(
   REPO_OWNER STRING,
   REPO_NAME STRING,
-  MAX_COMMITS NUMBER DEFAULT 500
+  MAX_COMMITS NUMBER DEFAULT 500,
+  REF STRING DEFAULT NULL
 )
 RETURNS VARIANT
 LANGUAGE PYTHON
@@ -89,7 +90,7 @@ def _auth_headers():
     return headers
 
 
-def run(session, repo_owner, repo_name, max_commits):
+def run(session, repo_owner, repo_name, max_commits, ref=None):
     if not OWNER_RE.match(repo_owner or "") or not REPO_RE.match(repo_name or "") or ".." in repo_name:
         return {"status": "failed", "errorCode": "invalid_repo_slug"}
 
@@ -107,11 +108,14 @@ def run(session, repo_owner, repo_name, max_commits):
     rows = []
     page = 1
     per_page = 100
+    base_params = {"per_page": per_page}
+    if ref:
+        base_params["sha"] = ref
     while len(rows) < max_commits:
         resp = requests.get(
             f"{GITHUB_API}/repos/{repo_slug}/commits",
             headers=headers,
-            params={"per_page": per_page, "page": page},
+            params={**base_params, "page": page},
             timeout=10,
         )
         resp.raise_for_status()

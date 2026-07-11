@@ -68,21 +68,21 @@ Events" share. See `docs/initial-design-spec.md` for the full product spec.
 
 Run everything through `make` (delegates to pnpm):
 
-| Command                             | Description                                  |
-| ----------------------------------- | -------------------------------------------- |
-| `make install`                      | Install dependencies                         |
-| `make dev`                          | Start the Vite dev server (client + Worker)  |
-| `make format` / `make format-check` | Format / check formatting                    |
-| `make lint`                         | ESLint                                       |
-| `make typecheck`                    | `tsc --noEmit` across all project references |
-| `make test`                         | Vitest unit tests with coverage              |
-| `make e2e`                          | Playwright e2e tests                         |
-| `make perf`                         | Local Lighthouse (never CI)                  |
-| `make secret-scan`                  | gitleaks                                     |
-| `make build`                        | Production build                             |
-| `make deploy`                       | `wrangler deploy`                            |
-| `make ai-checks`                    | format-check + lint + typecheck + test       |
-| `make clean`                        | Remove build + dependency artifacts          |
+| Command                             | Description                                         |
+| ----------------------------------- | --------------------------------------------------- |
+| `make install`                      | Install dependencies                                |
+| `make dev`                          | Start the Vite dev server (client + Worker)         |
+| `make format` / `make format-check` | Format / check formatting                           |
+| `make lint`                         | ESLint                                              |
+| `make typecheck`                    | `tsc -b --noEmit` across all project references     |
+| `make test`                         | Vitest unit tests with coverage                     |
+| `make e2e`                          | Playwright e2e tests                                |
+| `make perf`                         | Local Lighthouse (never CI)                         |
+| `make secret-scan`                  | gitleaks                                            |
+| `make build`                        | Production build                                    |
+| `make deploy`                       | Build, then `wrangler deploy`                       |
+| `make ai-checks`                    | format-check + lint + typecheck + test + actionlint |
+| `make clean`                        | Remove build + dependency artifacts                 |
 
 ## Test Standards
 

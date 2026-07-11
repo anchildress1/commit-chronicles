@@ -72,8 +72,9 @@ actionlint:
 		exit 1; \
 	fi
 
-# Deploy to Cloudflare Workers
-deploy:
+# Deploy to Cloudflare Workers (always builds first — wrangler ships whatever
+# is in dist/, so a stale or missing build silently deploys the wrong thing)
+deploy: build
 	@echo "☁️ Deploying to Cloudflare..."
 	pnpm deploy
 

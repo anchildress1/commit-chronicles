@@ -118,9 +118,6 @@ jobs:
       contents: read
       pull-requests: write
 
-    env:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -133,8 +130,12 @@ jobs:
           name: coverage-report
           path: coverage/
 
+      - name: Check for Sonar token
+        id: sonar-check
+        run: echo "has-token=${{ secrets.SONAR_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
       - name: SonarQube scan
-        if: env.SONAR_TOKEN != ''
+        if: steps.sonar-check.outputs.has-token == 'true'
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0 # nosemgrep
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

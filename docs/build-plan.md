@@ -43,7 +43,7 @@ Snowflake gets its own data, finds the story, and reads it. Cloud Run serves the
 | `COMMITS_CLEAN` (view) | drops merges + bots, derives date/hour parts | ✅ deployed |
 | detector views | gaps, streaks, night share, drama scores → one winner | 🔨 `snowflake/detector.sql` |
 | `CARD_EVIDENCE` (view) | the winning thread's ~20 commits — all Cortex ever sees | 🔨 `snowflake/detector.sql` |
-| `PROC READ_REPO(owner, repo)` | detector → Cortex → card payload JSON | ⬜ next |
+| `PROC READ_REPO(owner, repo)` | ingest if cold → detector → Cortex → card payload JSON | ✅ deployed |
 | `TASK` | scheduled regeneration | ⬜ cuttable |
 
 No `STORAGE INTEGRATION` and no external stage — Cloud Run owns the bucket.

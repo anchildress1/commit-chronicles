@@ -80,12 +80,29 @@ DECLARE
     result          VARIANT;
     card            VARIANT;
     cortex_query_id STRING;
+    ingest          VARIANT;
     reasons         ARRAY   DEFAULT ARRAY_CONSTRUCT();
 BEGIN
     SELECT COUNT(*) INTO :hits
       FROM CARD_EVIDENCE
      WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO;
 
+    -- Cloud Run calls this procedure and nothing else, so a repo nobody has read before
+    -- has to be fetched here. Ingest keeps its own failures (private, missing, oversized)
+    -- and they pass straight back to the caller.
+    IF (hits = 0) THEN
+        CALL INGEST_REPO_COMMITS(:P_OWNER, :P_REPO) INTO :ingest;
+
+        IF (:ingest:status::STRING <> 'ready') THEN
+            RETURN :ingest;
+        END IF;
+
+        SELECT COUNT(*) INTO :hits
+          FROM CARD_EVIDENCE
+         WHERE REPO_OWNER = :P_OWNER AND REPO_NAME = :P_REPO;
+    END IF;
+
+    -- Still nothing: the repo has commits, but every one is a bot or a merge.
     IF (hits = 0) THEN
         RETURN OBJECT_CONSTRUCT(
             'status',    'failed',

@@ -42,6 +42,10 @@ Canonical instruction source for this repository. Treat this file as authoritati
   Generated-by: Claude Sonnet 5 <noreply@anthropic.com>
   Signed-off-by: Your Name <your.email@example.com>
   ```
+- The RAI footer names the model that **wrote the diff**, not the one committing it.
+  Reviewing, deploying, or verifying another agent's work is not authorship. When
+  committing a diff authored elsewhere (e.g. Cortex Code), credit that model. If it
+  isn't recorded anywhere, ask — never guess, and never default to yourself.
 
 ## Project: Commit Chronicles
 

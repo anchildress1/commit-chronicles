@@ -29,60 +29,48 @@ CREATE STAGE IF NOT EXISTS COMMIT_STAGE FILE_FORMAT = NDJSON_GZ;
 
 -- 4. The table. Typed at load, not at read.
 CREATE TABLE IF NOT EXISTS COMMITS (
-  REPO          STRING       NOT NULL,
-  SHA           STRING       NOT NULL,
-  AUTHOR        STRING,
-  EMAIL         STRING,
-  SUBJECT       STRING,
-  BODY          STRING,
-  AUTHORED_AT   TIMESTAMP_TZ NOT NULL,   -- keeps the committer's original UTC offset
-  COMMITTED_AT  TIMESTAMP_TZ,
-  PARENT_COUNT  NUMBER(2,0)              -- >1 = merge
+  REPO_OWNER     STRING       NOT NULL,
+  REPO_NAME      STRING       NOT NULL,
+  SHA            STRING       NOT NULL,
+  AUTHOR         STRING,
+  EMAIL          STRING,
+  SUBJECT        STRING,
+  BODY           STRING,
+  AUTHORED_AT    TIMESTAMP_TZ NOT NULL,   -- keeps the committer's original UTC offset
+  COMMITTED_AT   TIMESTAMP_TZ,
+  PARENT_COUNT   NUMBER(2,0),             -- >1 = merge
+  IS_BOT         BOOLEAN      DEFAULT FALSE,  -- automated account (dependabot, CI), not a person
+  IS_AI_ASSISTED BOOLEAN      DEFAULT FALSE   -- human commit, AI trailer present. Not the same as IS_BOT.
 );
 
--- 5. Load. PUT does not work in Snowsight — SnowSQL / Python connector / snow CLI.
---
--- DELETE FROM COMMITS WHERE REPO = 'owner/name';   -- reloading? do this first
---
--- PUT file:///tmp/commits.ndjson.gz @COMMIT_STAGE AUTO_COMPRESS=FALSE;
---
--- COPY INTO COMMITS (REPO, SHA, AUTHOR, EMAIL, SUBJECT, BODY,
---                    AUTHORED_AT, COMMITTED_AT, PARENT_COUNT)
--- FROM (
---   SELECT
---     $1:repo::STRING,
---     $1:sha::STRING,
---     $1:author::STRING,
---     LOWER($1:email::STRING),
---     $1:subject::STRING,
---     $1:body::STRING,
---     $1:authored_at::TIMESTAMP_TZ,
---     $1:committed_at::TIMESTAMP_TZ,
---     ARRAY_SIZE(SPLIT(NULLIF($1:parents::STRING, ''), ' '))
---   FROM @COMMIT_STAGE/commits.ndjson.gz (FILE_FORMAT => NDJSON_GZ)
--- )
--- ON_ERROR = 'ABORT_STATEMENT';   -- one bad date kills the load, on purpose
+-- Migrate the old combined REPO ('owner/name') column into REPO_OWNER/REPO_NAME.
+-- No-ops on a fresh table (REPO never existed) or once already migrated.
+ALTER TABLE COMMITS ADD COLUMN IF NOT EXISTS REPO_OWNER STRING;
+ALTER TABLE COMMITS ADD COLUMN IF NOT EXISTS REPO_NAME STRING;
+UPDATE COMMITS SET
+  REPO_OWNER = SPLIT_PART(REPO, '/', 1),
+  REPO_NAME  = SPLIT_PART(REPO, '/', 2)
+WHERE REPO_OWNER IS NULL AND REPO IS NOT NULL;
+ALTER TABLE COMMITS DROP COLUMN IF EXISTS REPO;
+ALTER TABLE COMMITS ALTER COLUMN REPO_OWNER SET NOT NULL;
+ALTER TABLE COMMITS ALTER COLUMN REPO_NAME SET NOT NULL;
 
--- 6. The detector's input. Filtering + derived time parts. No parsing.
+-- 5. The detector's input. Filtering + derived time parts. No parsing.
 CREATE OR REPLACE VIEW COMMITS_CLEAN AS
 SELECT
-    REPO, SHA, AUTHOR, EMAIL, SUBJECT, BODY, AUTHORED_AT,
+    REPO_OWNER, REPO_NAME, SHA, AUTHOR, EMAIL, SUBJECT, BODY, AUTHORED_AT, IS_AI_ASSISTED,
     DATE(AUTHORED_AT)    AS AUTHORED_DATE,
     HOUR(AUTHORED_AT)    AS LOCAL_HOUR,
     DAYNAME(AUTHORED_AT) AS LOCAL_DOW
 FROM COMMITS
 WHERE PARENT_COUNT <= 1                      -- merges are bookkeeping, not confession
-  AND EMAIL   NOT ILIKE '%[bot]%'
-  AND EMAIL   NOT ILIKE '%noreply@github.com'
-  AND AUTHOR  NOT ILIKE '%dependabot%'
-  AND AUTHOR  NOT ILIKE '%renovate%'
-  AND AUTHOR  NOT ILIKE '%github-actions%'
+  AND NOT IS_BOT                             -- flagged at ingestion, not guessed here
   AND SUBJECT NOT RLIKE '^(Merge (pull request|branch|remote)|Bump |chore\\(deps\\)|Update dependenc)';
 
--- 7. Verify after first load.
-SELECT REPO,
+-- 6. Verify after first load.
+SELECT REPO_OWNER, REPO_NAME,
        COUNT(*)               AS commits,
        MIN(AUTHORED_DATE)     AS first_commit,
        MAX(AUTHORED_DATE)     AS last_commit,
        COUNT(DISTINCT AUTHOR) AS authors
-FROM COMMITS_CLEAN GROUP BY REPO;
+FROM COMMITS_CLEAN GROUP BY REPO_OWNER, REPO_NAME;

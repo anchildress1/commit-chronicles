@@ -43,6 +43,12 @@ REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 BOT_NAME_RE = re.compile(r"(?i)\[bot\]|dependabot|renovate|github-actions")
 BOT_EMAIL_RE = re.compile(r"(?i)\[bot\]@|noreply@github\.com$")
 
+# GitHub omits author.login when it cannot link a commit to an account, but its own
+# noreply addresses still carry the login: "id+login@" (current) or "login@" (legacy).
+NOREPLY_RE = re.compile(
+    r"(?i)^(?:\d+\+)?([a-z0-9](?:[a-z0-9-]{0,38}))@users\.noreply\.github\.com$"
+)
+
 # Omits cursor/opus/haiku/sonnet/grok: ordinary words that would match normal commits.
 AI_NAME_RE = re.compile(
     r"(?i)\b("
@@ -65,6 +71,11 @@ def _classify(commit_obj, gh_author, gh_committer, subject, body):
     )
     is_ai_assisted = bool(AI_NAME_RE.search(f"{subject}\n{body or ''}"))
     return is_bot, is_ai_assisted
+
+
+def _login_from_email(email):
+    match = NOREPLY_RE.match(email or "")
+    return match.group(1) if match else None
 
 
 def _auth_headers():
@@ -121,13 +132,15 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
             is_bot, is_ai_assisted = _classify(
                 commit, c.get("author"), c.get("committer"), subject.strip(), body
             )
+            email = (author.get("email") or "").lower() or None
+            login = (c.get("author") or {}).get("login") or _login_from_email(email)
             rows.append((
                 repo_owner,
                 repo_name,
                 c.get("sha"),
                 author.get("name"),
-                (c.get("author") or {}).get("login"),
-                (author.get("email") or "").lower() or None,
+                login,
+                email,
                 subject.strip(),
                 body,
                 author.get("date"),

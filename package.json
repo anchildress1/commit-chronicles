@@ -9,7 +9,7 @@
   "scripts": {
     "prepare": "lefthook install",
     "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:dev:api\" \"npm:dev:web\"",
-    "dev:api": "tsx watch src/server/index.ts",
+    "dev:api": "tsx watch --env-file-if-exists=.env src/server/index.ts",
     "dev:web": "vite",
     "build": "npm run build:web && npm run build:api",
     "build:web": "vite build",

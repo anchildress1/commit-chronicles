@@ -20,6 +20,10 @@ export default defineConfig({
       // module request and proxies it to the backend — where it 404s, and the SPA never
       // boots. Only real API routes go through.
       '^/api/': 'http://localhost:8080',
+
+      // The card is served by the API, not by Vite. Without this the SPA fallback answers
+      // with index.html and the preview renders as a broken image.
+      '^/[^/]+/[^/]+/card\\.svg$': 'http://localhost:8080',
     },
   },
 });

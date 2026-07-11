@@ -157,8 +157,8 @@ One call, fed **only the winning storyline's evidence**: ~10–20 real commit me
   "label_first": "it begins",
   "label_pivot": "",
   "label_last": "",
-  "accent": "#e2695e",
-  "accent_reason": "ember — a repo that ran hot and went out"
+  "accent": "#e8a04a",
+  "accent_reason": "amber, for a repo that ran hot and went out"
 }
 ```
 
@@ -167,6 +167,18 @@ Nine keys. That is the whole surface area of the writing on the card.
 **The italic run is a fragment, not a clause.** The renderer sets `headline_upright` upright, `headline_accent` italic and in the accent colour, `headline_trail` upright again. The italic can start mid-sentence — that's the design. Punctuation may live in `accent` or `trail`; put it where the typography looks right.
 
 **Cortex chooses the palette.** One `accent` hex paints every accent-coloured element on the card: kicker slug, italic headline fragment, last-commit dot, arrow, void-panel rule, attribution bullet. It is a reading of the arc, not a brand constant: a repo that went quiet and a repo that came back and shipped must not wear the same colour.
+
+The palette is **muted neons** — bright but not fluorescent, saturated but not raw. Anchor hues on the spectrum:
+
+| hex       | family        | reads as                    |
+|-----------|---------------|-----------------------------|
+| `#e8a04a` | muted amber   | burn, heat, ember           |
+| `#e56b5a` | muted coral   | conflict, alarm, warning    |
+| `#d3e85a` | muted lime    | return, growth, life        |
+| `#7fe4c5` | muted mint    | cool, dawn, calm            |
+| `#6ab5f5` | muted sky     | night, distance, quiet      |
+
+Cortex may drift slightly off these anchors — the constraint is the family, not the exact swatch. No greys, no browns, no fluorescents, no deep saturated primaries. `none`-storyline cards use grey (`#6b7280`) deliberately; that colour is reserved for "no story to tell".
 
 **Not every storyline uses every anchor.** The detector picks the storyline first and only the anchors that storyline actually uses get labelled. `label_pivot` is empty for a collapse (no separate pivot from the last commit). `label_last` is empty unless the repo is still active — for abandoned or dormant repos the renderer prints `"last commit · <time>"` and adding a poetic tail on top reads as filler.
 

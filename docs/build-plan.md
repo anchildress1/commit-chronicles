@@ -69,8 +69,8 @@ Feed **only the winning thread's evidence** — ~10–20 real commit messages pl
   "label_first": "it begins",
   "label_pivot": "",
   "label_last": "",
-  "accent": "#e2695e",
-  "accent_reason": "ember, for a thing that burned out" }
+  "accent": "#e8a04a",
+  "accent_reason": "amber, for a thing that burned out" }
 ```
 Nine keys, all the writing on the card. The italic run sits inside sentence 2 — `headline_upright` is upright, `headline_accent` is italic and in the accent colour, `headline_trail` is upright again. Empty labels for the anchors this storyline doesn't use (a collapse has no separate pivot; a non-active repo doesn't get a poetic label on the last commit).
 

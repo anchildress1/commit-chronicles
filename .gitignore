@@ -17,3 +17,6 @@ Thumbs.db
 
 # Build tooling
 .vite/
+
+# Agent scratch
+.cortex/

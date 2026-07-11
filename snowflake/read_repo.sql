@@ -142,6 +142,7 @@ BEGIN
                    'status',          'ready',
                    'repo',            REPO_OWNER || '/' || REPO_NAME,
                    'storyline',       STORYLINE,
+                   'score',           SCORE,
                    'statusLabel',     STATUS,
                    'kicker',          KICKER,
                    'headlineUpright', HEADLINE_UPRIGHT,

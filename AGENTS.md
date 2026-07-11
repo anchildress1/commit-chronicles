@@ -13,6 +13,8 @@ Canonical instruction source for this repository. Treat this file as authoritati
 - Do not implement quick fixes in this codebase for any reason.
 - Any test files introduced for local validation must be removed, not committed.
 - Prerelease changes are never a breaking change; do not add backwards-compat shims.
+- Do not run audible completion commands such as `say`; completion belongs in chat,
+  not in a tool transcript. Tiny robot confetti is still confetti.
 
 ### Security: file access and path handling
 
@@ -42,18 +44,19 @@ Canonical instruction source for this repository. Treat this file as authoritati
 
 ## Project: Commit Chronicles
 
-Paste a GitHub handle, get a card ranking your commit habits (volume, chronotype,
-weekend ratio, streak, consistency, AI-attribution) as a population percentile over a
-trailing 7-day window. Data comes from the Snowflake Marketplace "Cybersyn: GitHub
-Events" share. See `docs/initial-design-spec.md` for the full product spec.
+Paste a GitHub handle, start a generation job, wait or come back later, then get a
+shareable commit memoir built from public commit messages. GitHub commit data is
+ingested by the API layer, processed through Snowflake Cortex AISQL, and cached in
+Firestore. See `docs/initial-design-spec.md` for the full product spec.
 
 ### Stack
 
 - **Frontend**: Vite + React 19 SPA, TypeScript strict.
-- **Backend**: a single Cloudflare Worker (Hono) that serves the built static assets
-  and the `/api/*` routes — one deployable unit, one URL.
-- **Build**: `@cloudflare/vite-plugin` drives one `vite build` producing both the
-  client bundle and the Worker; `wrangler deploy` ships it.
+- **Backend**: Cloud Run service for `/api/*` generation endpoints.
+- **Hosting/cache**: Firebase Hosting for the embed and Firestore for generated
+  chronicle documents.
+- **AI/data engine**: Snowflake Cortex AISQL (`AI_CLASSIFY`, `AI_FILTER`, `AI_AGG`)
+  used only on generation misses.
 - **Package manager**: pnpm (pinned via Volta). Node 24+.
 - **Tests**: Vitest (unit) + Playwright (e2e).
 
@@ -95,12 +98,20 @@ Run everything through `make` (delegates to pnpm):
 - `strict: true` is enforced. Run `make typecheck` to verify.
 - Do not weaken strict settings or add `// @ts-ignore` without a justifying comment.
 
-## Application Logic (not yet built)
+## Application Logic
 
-- Do not scaffold Snowflake SQL, percentile math, or card rendering until asked — the
-  current app is a placeholder landing view plus a `/api/health` route.
-- When metrics land: descriptive not causal, templated not LLM-freeform, and always
-  filter the 7-day date window _before_ any window function (cost guard).
+- User flow is handle-first: enter a public GitHub username, submit once, and create
+  or resume a Firestore-backed generation record.
+- Generation continues after submission even if the user leaves the page.
+- Returning to `/?handle=<name>` must attach to the existing Firestore record and show
+  `generating`, `ready`, or `failed` state.
+- The serving path reads Firestore only. Snowflake and GitHub are never called on a
+  normal render of a cached chronicle.
+- The API layer is responsible for writing generation status and final output back to
+  Firestore.
+- Cortex output must be descriptive and fact-constrained. Do not infer motivation.
+- Cost guards are mandatory: cap repos, cap commits per repo, cap daily live
+  generations, cache failures, and keep gallery records pre-generated.
 
 ## Documentation
 

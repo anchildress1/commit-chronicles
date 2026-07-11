@@ -40,3 +40,6 @@ tmp/
 # Agent scratch
 .cortex/
 .claude/
+
+# Playwright MCP scratch output
+.playwright-mcp/

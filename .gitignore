@@ -7,19 +7,36 @@ Thumbs.db
 .idea/
 *.swp
 
-# Env
+# Env — real credentials never land in the repo. The example is the only one tracked.
 .env
 .env.*
 !.env.example
 
 # Logs
 *.log
+npm-debug.log*
 
 # Dependencies
 node_modules/
 
-# Build tooling
+# Build output
+dist/
 .vite/
+*.tsbuildinfo
+
+# Test output
+coverage/
+playwright-report/
+blob-report/
+test-results/
+.playwright/
+
+# Local scratch — throwaway renders, probe scripts, anything used to eyeball a change.
+# None of it is the test suite, and none of it belongs in a commit.
+scratch/
+tmp/
+*.local
 
 # Agent scratch
 .cortex/
+.claude/

@@ -1,0 +1,19 @@
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: npx --no-install commitlint --edit {1}
+
+pre-commit:
+  parallel: true
+  jobs:
+    # actionlint is a Go binary, installed via brew. The npm package is a third-party
+    # wasm repackage, so it is not a dependency here. Skip loudly rather than break a
+    # commit for anyone who has not installed it; CodeQL still scans workflows in CI.
+    - name: actionlint
+      glob: ".github/workflows/*.yml"
+      run: |
+        if ! command -v actionlint >/dev/null 2>&1; then
+          echo "actionlint not found — skipping workflow lint (brew install actionlint)"
+          exit 0
+        fi
+        actionlint {staged_files}

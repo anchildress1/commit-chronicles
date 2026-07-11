@@ -42,22 +42,39 @@ Canonical instruction source for this repository. Treat this file as authoritati
   Generated-by: Claude Sonnet 5 <noreply@anthropic.com>
   Signed-off-by: Your Name <your.email@example.com>
   ```
+- The RAI footer names the model that **wrote the diff**, not the one committing it.
+  Reviewing, deploying, or verifying another agent's work is not authorship. When
+  committing a diff authored elsewhere (e.g. Cortex Code), credit that model. If it
+  isn't recorded anywhere, ask — never guess, and never default to yourself.
 
 ## Project: Commit Chronicles
 
 Paste a public GitHub repo (`owner/repo`), start a generation job, wait or come back
-later, then get a shareable commit story card plus a copyable README embed. GitHub
-commit data for that repo is fetched by the API layer, processed through Snowflake
-Cortex AISQL, and cached in Firestore. See `docs/initial-design-spec.md` for the full
-product spec.
+later, then get a shareable commit story card plus a copyable README embed. Snowflake
+fetches the repo's commits itself, finds the single most dramatic true storyline with
+plain SQL, and narrates that one thread with Cortex. See `docs/initial-design-spec.md`
+for the full product spec and `docs/build-plan.md` for the delivery order.
 
 ### Stack
 
-- **Backend**: Cloud Run service for `/api/*` generation endpoints.
-- **Hosting/cache**: Firebase Hosting for the embed and Firestore for generated
-  chronicle documents.
-- **AI/data engine**: Snowflake Cortex AISQL (`AI_CLASSIFY`, `AI_FILTER`, `AI_AGG`)
-  used only on generation misses.
+- **Data + AI engine**: Snowflake does the work. An external access integration
+  reaches `api.github.com` from inside a stored procedure; plain SQL views score the
+  storylines; and `CHRONICLE_CARD` — a hand-written SQL UDF wrapping `AI_COMPLETE` —
+  narrates the winner and picks the accent color in one schema-constrained call.
+
+  Do not build it with Cortex AI Function Studio. The Studio registers functions through
+  `SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION`, which Snowflake documents as internal, not to be
+  called directly, and subject to change without notice; its supported entry points are a
+  Snowsight wizard and the Cortex Code CLI, neither of which leaves the function in this
+  repo. It emits an ordinary UDF around `AI_COMPLETE` anyway, so we write that ourselves.
+- **Backend**: Cloud Run — `/api/generate`, plus serving `/{owner}/{repo}` and
+  `/{owner}/{repo}/card.svg`. It renders the SVG from Snowflake's card payload and
+  writes it to the bucket. It computes no analysis of its own.
+- **Cache of record**: a public GCS bucket. The card's existence in the bucket *is*
+  the ready state.
+
+There is no Firestore and no Firebase Hosting. Both were dropped in the Snowflake-native
+rescaffold; if you find a reference to either, it is stale — fix it.
 
 ## Test Standards
 
@@ -70,17 +87,24 @@ product spec.
 ## Application Logic
 
 - User flow is repo-first: enter a public `owner/repo`, submit once, and create or
-  resume a Firestore-backed generation record at `repoCards/{ownerRepoKey}`.
-- Generation continues after submission even if the user leaves the page.
-- Returning to `/{owner}/{repo}` must attach to the existing Firestore record and show
+  resume a generation job keyed by `{owner}/{repo}`.
+- Generation continues after submission even if the user leaves the page. If the
+  browser tab is required for generation to finish, the app is a loading spinner
+  wearing a trench coat.
+- Returning to `/{owner}/{repo}` must attach to the existing job and show
   `generating`, `ready`, or `failed` state.
-- The serving path reads Firestore only. Snowflake and GitHub are never called on a
+- The serving path reads the bucket only. Snowflake and GitHub are never called on a
   normal render of a cached repo page or card.
-- Cloud Run is the only writer of generation status and final payload to Firestore;
-  client writes are forbidden.
-- Cortex output must be descriptive and fact-constrained. Do not infer motivation.
+- Cloud Run is the only writer to the bucket; client writes are forbidden.
+- The detector is plain SQL and picks exactly one storyline. Cortex is only ever shown
+  the winning thread's evidence — never the whole history.
+- Cortex interprets the *shape* of the history and must invent nothing. Every
+  timestamp, count, gap, and quoted message on the card is real. Reading the arc is the
+  product; asserting the author's motivation is not.
+- A repo with no real story says so. Sparse histories get an honest template card, not
+  manufactured drama.
 - Cost guards are mandatory: cap commits per repo, cap daily live generations, cache
-  failed states, reject private/missing/oversized repos, and keep gallery records
+  failed states, reject private/missing/oversized repos, and keep gallery cards
   pre-generated.
 
 ## Documentation

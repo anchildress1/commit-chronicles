@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+.vite
+.cortex
+.claude
+docs
+snowflake
+tests
+playwright-report
+test-results
+*.log

@@ -120,7 +120,7 @@ Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are
 | `PROC INGEST_REPO_COMMITS(owner, repo)` | Python + external access → Commits API → `COMMITS` |
 | detector views | gaps, streaks, night share, storyline scores → `REPO_STORYLINE` |
 | `CARD_EVIDENCE` (view) | the winning thread's ~20 commits — the only thing Cortex sees |
-| `CHRONICLE_CARD` (AI function) | registered via `CREATE_AI_FUNCTION`; one structured call → the whole card |
+| `CHRONICLE_CARD` (UDF) | hand-written wrapper around `AI_COMPLETE`; one structured call → the whole card |
 | `CARDS` | the generated card payloads, plus the Cortex query id for cost audit |
 | `PROC READ_REPO(owner, repo)` | detector → `CHRONICLE_CARD` → structured card payload |
 | `TASK` | scheduled regeneration for the gallery |

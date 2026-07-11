@@ -55,9 +55,14 @@ for the full product spec and `docs/build-plan.md` for the delivery order.
 
 - **Data + AI engine**: Snowflake does the work. An external access integration
   reaches `api.github.com` from inside a stored procedure; plain SQL views score the
-  storylines; and `CHRONICLE_CARD` — a custom Cortex AI function registered via
-  `SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION` — narrates the winner and picks the accent
-  color in one schema-constrained call.
+  storylines; and `CHRONICLE_CARD` — a hand-written SQL UDF wrapping `AI_COMPLETE` —
+  narrates the winner and picks the accent color in one schema-constrained call.
+
+  Do not build it with Cortex AI Function Studio. The Studio registers functions through
+  `SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION`, which Snowflake documents as internal, not to be
+  called directly, and subject to change without notice; its supported entry points are a
+  Snowsight wizard and the Cortex Code CLI, neither of which leaves the function in this
+  repo. It emits an ordinary UDF around `AI_COMPLETE` anyway, so we write that ourselves.
 - **Backend**: Cloud Run — `/api/generate`, plus serving `/{owner}/{repo}` and
   `/{owner}/{repo}/card.svg`. It renders the SVG from Snowflake's card payload and
   writes it to the bucket. It computes no analysis of its own.

@@ -67,10 +67,11 @@ for the full product spec and `docs/build-plan.md` for the delivery order.
   called directly, and subject to change without notice; its supported entry points are a
   Snowsight wizard and the Cortex Code CLI, neither of which leaves the function in this
   repo. It emits an ordinary UDF around `AI_COMPLETE` anyway, so we write that ourselves.
+
 - **Backend**: Cloud Run — `/api/generate`, plus serving `/{owner}/{repo}` and
   `/{owner}/{repo}/card.svg`. It renders the SVG from Snowflake's card payload and
   writes it to the bucket. It computes no analysis of its own.
-- **Cache of record**: a public GCS bucket. The card's existence in the bucket *is*
+- **Cache of record**: a public GCS bucket. The card's existence in the bucket _is_
   the ready state.
 
 There is no Firestore and no Firebase Hosting. Both were dropped in the Snowflake-native
@@ -98,7 +99,7 @@ rescaffold; if you find a reference to either, it is stale — fix it.
 - Cloud Run is the only writer to the bucket; client writes are forbidden.
 - The detector is plain SQL and picks exactly one storyline. Cortex is only ever shown
   the winning thread's evidence — never the whole history.
-- Cortex interprets the *shape* of the history and must invent nothing. Every
+- Cortex interprets the _shape_ of the history and must invent nothing. Every
   timestamp, count, gap, and quoted message on the card is real. Reading the arc is the
   product; asserting the author's motivation is not.
 - A repo with no real story says so. Sparse histories get an honest template card, not

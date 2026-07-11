@@ -76,10 +76,10 @@ AS
 $$
 DECLARE
     hits            INTEGER DEFAULT 0;
-    storyline       STRING  DEFAULT NULL;
-    result          VARIANT DEFAULT NULL;
-    card            VARIANT DEFAULT NULL;
-    cortex_query_id STRING  DEFAULT NULL;
+    storyline       STRING;
+    result          VARIANT;
+    card            VARIANT;
+    cortex_query_id STRING;
     reasons         ARRAY   DEFAULT ARRAY_CONSTRUCT();
 BEGIN
     SELECT COUNT(*) INTO :hits

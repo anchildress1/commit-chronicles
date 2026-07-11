@@ -111,16 +111,36 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1;
 
 CREATE OR REPLACE VIEW STORY_NOCTURNE AS
-WITH night AS (
-    SELECT
-        c.REPO_OWNER, c.REPO_NAME,
-        MAX(c.AUTHORED_AT) AS LATEST_NIGHT_AT,
-        MODE(c.UTC_HOUR)   AS TYPICAL_NIGHT_HOUR
+WITH night_commits AS (
+    SELECT c.REPO_OWNER, c.REPO_NAME, c.UTC_HOUR, c.AUTHORED_AT
     FROM COMMITS_CLEAN c
     CROSS JOIN DETECTOR_CONFIG cfg
     WHERE c.UTC_HOUR >= cfg.NIGHT_START_HOUR
        OR c.UTC_HOUR <  cfg.NIGHT_END_HOUR
-    GROUP BY c.REPO_OWNER, c.REPO_NAME
+),
+-- MODE() again: ties resolve arbitrarily, and this hour reaches Cortex as nocturne
+-- evidence, so the same repo could be narrated differently on two reads. Rank by
+-- how often the hour appears, then take the earlier hour.
+typical_hour AS (
+    SELECT REPO_OWNER, REPO_NAME, UTC_HOUR AS TYPICAL_NIGHT_HOUR
+    FROM (
+        SELECT REPO_OWNER, REPO_NAME, UTC_HOUR, COUNT(*) AS AT_THIS_HOUR
+        FROM night_commits
+        GROUP BY REPO_OWNER, REPO_NAME, UTC_HOUR
+    )
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY REPO_OWNER, REPO_NAME
+        ORDER BY AT_THIS_HOUR DESC, UTC_HOUR
+    ) = 1
+),
+night AS (
+    SELECT
+        n.REPO_OWNER, n.REPO_NAME,
+        MAX(n.AUTHORED_AT)          AS LATEST_NIGHT_AT,
+        ANY_VALUE(t.TYPICAL_NIGHT_HOUR) AS TYPICAL_NIGHT_HOUR
+    FROM night_commits n
+    JOIN typical_hour t USING (REPO_OWNER, REPO_NAME)
+    GROUP BY n.REPO_OWNER, n.REPO_NAME
 )
 SELECT
     f.REPO_OWNER,
@@ -390,10 +410,12 @@ WITH picked AS (
     FROM COMMITS_CLEAN c
     JOIN REPO_STORYLINE w USING (REPO_OWNER, REPO_NAME)
     QUALIFY
+        -- SHA breaks the last tie: rebases and batch pushes share an AUTHORED_AT, and
+        -- without it the twelve commits Cortex sees could differ between reads.
         (w.PIVOT_AT IS NOT NULL
          AND ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
                                 ORDER BY ABS(DATEDIFF(hour, w.PIVOT_AT, c.AUTHORED_AT)),
-                                         c.AUTHORED_AT) <= 12)
+                                         c.AUTHORED_AT, c.SHA) <= 12)
      OR ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
                            ORDER BY c.AUTHORED_AT, c.SHA) <= 3
      OR ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME

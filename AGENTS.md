@@ -68,6 +68,8 @@ product spec.
 - `test/` — unit tests, mirroring source: `test/src/` for `src/`, `test/worker/`
   for `worker/`. Not colocated with source files.
 - `e2e/` — Playwright specs.
+- `snowflake/` — Cortex ingestion SQL: one-time schema (`schema.sql`) and the
+  parameterized per-generation load template (`copy_commits.sql`).
 - `index.html` — Vite entry at repo root.
 
 ### Commands

@@ -126,6 +126,7 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
                 repo_name,
                 c.get("sha"),
                 author.get("name"),
+                (c.get("author") or {}).get("login"),
                 (author.get("email") or "").lower() or None,
                 subject.strip(),
                 body,
@@ -147,8 +148,8 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
     session.table("COMMITS").delete((col("REPO_OWNER") == repo_owner) & (col("REPO_NAME") == repo_name))
     session.create_dataframe(
         rows,
-        schema=["REPO_OWNER", "REPO_NAME", "SHA", "AUTHOR", "EMAIL", "SUBJECT", "BODY",
-                "AUTHORED_AT", "COMMITTED_AT", "PARENT_COUNT",
+        schema=["REPO_OWNER", "REPO_NAME", "SHA", "AUTHOR", "AUTHOR_LOGIN", "EMAIL",
+                "SUBJECT", "BODY", "AUTHORED_AT", "COMMITTED_AT", "PARENT_COUNT",
                 "IS_BOT", "IS_AI_ASSISTED"],
     ).write.mode("append").save_as_table("COMMITS", column_order="name")
 

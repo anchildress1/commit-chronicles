@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS CARDS (
 );
 
 -- Full scatter for the renderer. Never sent to a model.
+-- m is the minute: the card annotates exact times ("3:53 AM"), which an integer hour
+-- cannot produce. Dot height is h + m/60.
 CREATE OR REPLACE VIEW CARD_PLOT AS
 SELECT
     c.REPO_OWNER,
@@ -33,11 +35,30 @@ SELECT
     ARRAY_AGG(OBJECT_CONSTRUCT(
         'd', TO_VARCHAR(c.AUTHORED_DATE),
         'h', c.UTC_HOUR,
+        'm', MINUTE(c.AUTHORED_AT),
         'n', c.UTC_HOUR >= cfg.NIGHT_START_HOUR OR c.UTC_HOUR < cfg.NIGHT_END_HOUR
     )) WITHIN GROUP (ORDER BY c.AUTHORED_AT) AS PLOT
 FROM COMMITS_CLEAN c
 CROSS JOIN DETECTOR_CONFIG cfg
 GROUP BY c.REPO_OWNER, c.REPO_NAME;
+
+-- Renderer inputs are derived, so they can be rebuilt from the views without re-narrating.
+-- Calling READ_REPO for this would re-bill every card in the gallery.
+CREATE OR REPLACE PROCEDURE REFRESH_CARD_DATA()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+BEGIN
+    UPDATE CARDS c
+       SET FACTS = w.FACTS,
+           PLOT  = p.PLOT
+      FROM REPO_STORYLINE w, CARD_PLOT p
+     WHERE c.REPO_OWNER = w.REPO_OWNER AND c.REPO_NAME = w.REPO_NAME
+       AND c.REPO_OWNER = p.REPO_OWNER AND c.REPO_NAME = p.REPO_NAME;
+    RETURN 'ok';
+END;
+$$;
 
 CREATE OR REPLACE PROCEDURE READ_REPO(P_OWNER STRING, P_REPO STRING)
 RETURNS VARIANT

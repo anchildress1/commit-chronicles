@@ -27,6 +27,10 @@ SELECT
     COUNT(DISTINCT c.AUTHORED_DATE)                 AS ACTIVE_DAYS,
     MIN(c.AUTHORED_AT)                              AS FIRST_COMMIT_AT,
     MAX(c.AUTHORED_AT)                              AS LAST_COMMIT_AT,
+    MIN_BY(c.SUBJECT, c.AUTHORED_AT)                AS FIRST_COMMIT_SUBJECT,
+    MAX_BY(c.SUBJECT, c.AUTHORED_AT)                AS LAST_COMMIT_SUBJECT,
+    MODE(c.AUTHOR)                                  AS PRIMARY_AUTHOR,
+    MODE(c.AUTHOR_LOGIN)                            AS PRIMARY_AUTHOR_LOGIN,
     DATEDIFF(day, MIN(c.AUTHORED_AT), MAX(c.AUTHORED_AT))  AS SPAN_DAYS,
     DATEDIFF(day, MAX(c.AUTHORED_AT), CURRENT_TIMESTAMP()) AS DAYS_SINCE_LAST,
     SUM(IFF(c.UTC_HOUR >= cfg.NIGHT_START_HOUR
@@ -50,6 +54,19 @@ SELECT
     DATEDIFF(day, PREV_AT, AUTHORED_AT) AS GAP_DAYS
 FROM lagged
 WHERE PREV_AT IS NOT NULL;
+
+-- The card draws a void panel over the longest silence whichever storyline wins, so the
+-- gap cannot live only in the relapse evidence.
+CREATE OR REPLACE VIEW REPO_LARGEST_GAP AS
+SELECT
+    REPO_OWNER, REPO_NAME,
+    GAP_DAYS,
+    PREV_AT     AS DARK_FROM,
+    AUTHORED_AT AS DARK_TO
+FROM COMMIT_GAPS
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY REPO_OWNER, REPO_NAME ORDER BY GAP_DAYS DESC, AUTHORED_AT
+) = 1;
 
 -- Every storyline emits: REPO_OWNER, REPO_NAME, STORYLINE, SCORE (0-100), PIVOT_AT, EVIDENCE.
 
@@ -307,17 +324,27 @@ SELECT
     s.PIVOT_AT,
     COALESCE(s.EVIDENCE, OBJECT_CONSTRUCT()) AS EVIDENCE,
     OBJECT_CONSTRUCT(
-        'commitCount',       f.COMMIT_COUNT,
-        'authorCount',       f.AUTHOR_COUNT,
-        'activeDays',        f.ACTIVE_DAYS,
-        'spanDays',          f.SPAN_DAYS,
-        'daysSinceLast',     f.DAYS_SINCE_LAST,
-        'nightCommits',      f.NIGHT_COMMITS,
-        'aiAssistedCommits', f.AI_ASSISTED_COMMITS,
-        'firstCommitAt',     TO_VARCHAR(f.FIRST_COMMIT_AT),
-        'lastCommitAt',      TO_VARCHAR(f.LAST_COMMIT_AT)
+        'commitCount',        f.COMMIT_COUNT,
+        'authorCount',        f.AUTHOR_COUNT,
+        'primaryAuthor',      f.PRIMARY_AUTHOR,
+        'primaryAuthorLogin', f.PRIMARY_AUTHOR_LOGIN,
+        'activeDays',         f.ACTIVE_DAYS,
+        'spanDays',           f.SPAN_DAYS,
+        'daysSinceLast',      f.DAYS_SINCE_LAST,
+        'nightCommits',       f.NIGHT_COMMITS,
+        'aiAssistedCommits',  f.AI_ASSISTED_COMMITS,
+        'firstCommitAt',      TO_VARCHAR(f.FIRST_COMMIT_AT),
+        'firstCommitSubject', f.FIRST_COMMIT_SUBJECT,
+        'lastCommitAt',       TO_VARCHAR(f.LAST_COMMIT_AT),
+        'lastCommitSubject',  f.LAST_COMMIT_SUBJECT,
+        'largestGap',         IFF(g.GAP_DAYS IS NULL, NULL, OBJECT_CONSTRUCT(
+            'days', g.GAP_DAYS,
+            'from', TO_VARCHAR(g.DARK_FROM),
+            'to',   TO_VARCHAR(g.DARK_TO)
+        ))
     )                                        AS FACTS
 FROM REPO_FACTS f
+LEFT JOIN REPO_LARGEST_GAP g USING (REPO_OWNER, REPO_NAME)
 LEFT JOIN STORYLINE_SCORES s USING (REPO_OWNER, REPO_NAME)
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY f.REPO_OWNER, f.REPO_NAME

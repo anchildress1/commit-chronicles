@@ -1,0 +1,230 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCardStore } from '../../src/server/bucket.js';
+import { CARD } from '../fixtures/card.js';
+
+/** A GCS error carries an HTTP status on `code`; the store branches on 404 and 412. */
+class GcsError extends Error {
+  constructor(readonly code: number) {
+    super(`gcs ${String(code)}`);
+  }
+}
+
+interface FakeObject {
+  data: string;
+  generation: number;
+}
+
+/**
+ * A GCS double that enforces the one behaviour the quota counter depends on:
+ * `ifGenerationMatch` fails with 412 when the object moved underneath the writer.
+ */
+function fakeStorage(objects = new Map<string, FakeObject>()) {
+  const saved: { path: string; contentType: string | undefined; cacheControl: unknown }[] = [];
+
+  const storage = {
+    bucket: () => ({
+      file: (path: string) => ({
+        download: () => {
+          const object = objects.get(path);
+          if (!object) return Promise.reject(new GcsError(404));
+          return Promise.resolve([Buffer.from(object.data, 'utf8')]);
+        },
+        getMetadata: () => {
+          const object = objects.get(path);
+          if (!object) return Promise.reject(new GcsError(404));
+          return Promise.resolve([{ generation: object.generation }]);
+        },
+        save: (data: string, options?: Record<string, unknown>) => {
+          const expected = (options?.['preconditionOpts'] as { ifGenerationMatch?: number })
+            ?.ifGenerationMatch;
+          const current = objects.get(path)?.generation ?? 0;
+          if (expected !== undefined && expected !== current) {
+            return Promise.reject(new GcsError(412));
+          }
+          objects.set(path, { data, generation: current + 1 });
+          saved.push({
+            path,
+            contentType: options?.['contentType'] as string | undefined,
+            cacheControl: (options?.['metadata'] as { cacheControl?: unknown } | undefined)
+              ?.cacheControl,
+          });
+          return Promise.resolve();
+        },
+        delete: () => {
+          if (!objects.delete(path)) return Promise.reject(new GcsError(404));
+          return Promise.resolve();
+        },
+      }),
+    }),
+  };
+
+  return { storage, objects, saved };
+}
+
+const store = (fake: ReturnType<typeof fakeStorage>) =>
+  createCardStore('test-bucket', fake.storage as any);
+
+describe('readState', () => {
+  it('is unknown for a repo nobody has read', async () => {
+    const fake = fakeStorage();
+    await expect(store(fake).readState('atlas', 'pipeline')).resolves.toEqual({
+      status: 'unknown',
+      repo: 'atlas/pipeline',
+    });
+  });
+
+  it('is ready when the card payload exists, and carries the accent', async () => {
+    const fake = fakeStorage();
+    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+
+    await expect(store(fake).readState('atlas', 'pipeline')).resolves.toMatchObject({
+      status: 'ready',
+      accent: '#e8a04a',
+    });
+  });
+
+  it('lets a real card outrank a stale generating marker', async () => {
+    const fake = fakeStorage();
+    await store(fake).markGenerating('atlas', 'pipeline');
+    fake.objects.set('cards/atlas/pipeline/card.json', {
+      data: JSON.stringify(CARD),
+      generation: 1,
+    });
+
+    await expect(store(fake).readState('atlas', 'pipeline')).resolves.toMatchObject({
+      status: 'ready',
+    });
+  });
+
+  it('reports a cached failure with its error code', async () => {
+    const fake = fakeStorage();
+    await store(fake).markFailed('atlas', 'pipeline', 'repo_not_found');
+
+    await expect(store(fake).readState('atlas', 'pipeline')).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'repo_not_found',
+    });
+  });
+
+  it('propagates an error that is not a 404', async () => {
+    const fake = fakeStorage();
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: () => ({
+        download: () => Promise.reject(new GcsError(500)),
+        getMetadata: () => Promise.reject(new GcsError(500)),
+        save: () => Promise.resolve(),
+        delete: () => Promise.resolve(),
+      }),
+    });
+
+    await expect(store(fake).readState('atlas', 'pipeline')).rejects.toThrow('gcs 500');
+  });
+});
+
+describe('writeCard', () => {
+  it('writes the SVG before the payload, so a crash leaves the repo retryable', async () => {
+    const fake = fakeStorage();
+    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+
+    expect(fake.saved.map((entry) => entry.path)).toEqual([
+      'cards/atlas/pipeline/card.svg',
+      'cards/atlas/pipeline/card.json',
+    ]);
+  });
+
+  it('serves the SVG with a cache header camo will honour', async () => {
+    const fake = fakeStorage();
+    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+
+    expect(fake.saved[0]).toMatchObject({
+      contentType: 'image/svg+xml',
+      cacheControl: 'public, max-age=3600',
+    });
+  });
+
+  it('clears the generating marker once the card lands', async () => {
+    const fake = fakeStorage();
+    await store(fake).markGenerating('atlas', 'pipeline');
+    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+
+    expect(fake.objects.has('cards/atlas/pipeline/state.json')).toBe(false);
+  });
+
+  it('does not fail when there was no marker to clear', async () => {
+    const fake = fakeStorage();
+    await expect(
+      store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('readCardSvg', () => {
+  it('returns the card', async () => {
+    const fake = fakeStorage();
+    await store(fake).writeCard('atlas', 'pipeline', '<svg>card</svg>', CARD);
+
+    await expect(store(fake).readCardSvg('atlas', 'pipeline')).resolves.toBe('<svg>card</svg>');
+  });
+
+  it('returns null when there is no card', async () => {
+    await expect(store(fakeStorage()).readCardSvg('atlas', 'pipeline')).resolves.toBeNull();
+  });
+});
+
+describe('claimDailyQuota', () => {
+  const TODAY = '2026-07-11';
+
+  it('grants a slot when the budget is untouched', async () => {
+    await expect(store(fakeStorage()).claimDailyQuota(3, TODAY)).resolves.toBe(true);
+  });
+
+  it('counts up to the cap and then refuses', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+
+    await expect(cards.claimDailyQuota(2, TODAY)).resolves.toBe(true);
+    await expect(cards.claimDailyQuota(2, TODAY)).resolves.toBe(true);
+    await expect(cards.claimDailyQuota(2, TODAY)).resolves.toBe(false);
+  });
+
+  it('keeps a separate budget per day', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+
+    await cards.claimDailyQuota(1, TODAY);
+    await expect(cards.claimDailyQuota(1, TODAY)).resolves.toBe(false);
+    await expect(cards.claimDailyQuota(1, '2026-07-12')).resolves.toBe(true);
+  });
+
+  it('refuses rather than double-counting when two instances race', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+
+    // Both read count=0, both try to write generation 0; one must lose and retry.
+    const [first, second] = await Promise.all([
+      cards.claimDailyQuota(1, TODAY),
+      cards.claimDailyQuota(1, TODAY),
+    ]);
+
+    expect([first, second].filter(Boolean)).toHaveLength(1);
+  });
+
+  it('gives up rather than hammering a saturated counter', async () => {
+    const objects = new Map<string, FakeObject>();
+    const fake = fakeStorage(objects);
+    // Every write loses its precondition: the object always moves first.
+    const bucket = fake.storage.bucket();
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: (path: string) => ({
+        ...bucket.file(path),
+        save: () => Promise.reject(new GcsError(412)),
+      }),
+    });
+
+    await expect(store(fake).claimDailyQuota(100, TODAY)).resolves.toBe(false);
+  });
+});
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});

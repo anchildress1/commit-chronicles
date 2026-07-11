@@ -1,0 +1,205 @@
+import { describe, expect, it } from 'vitest';
+import { createGenerator, runGeneration, type Generator } from '../../src/server/generate.js';
+import type { Config } from '../../src/server/config.js';
+import { parseSlug } from '../../src/shared/slug.js';
+import { CARD } from '../fixtures/card.js';
+import {
+  fakeQueue,
+  fakeSnowflake,
+  fakeStore,
+  type FakeQueue,
+  type FakeSnowflake,
+  type FakeStore,
+} from './fakes.js';
+
+const SLUG = parseSlug('atlas/pipeline');
+
+function config(overrides: Partial<Config> = {}): Config {
+  return {
+    port: 8080,
+    bucket: 'test-bucket',
+    publicOrigin: 'https://commitchronicles.dev',
+    dailyGenerationCap: 2,
+    generatingTtlMs: 600_000,
+    tasks: null,
+    snowflake: {
+      account: 'acct',
+      username: 'user',
+      token: 'pat',
+      warehouse: 'WH',
+      database: 'DB',
+      schema: 'RAW',
+      role: 'ROLE',
+    },
+    ...overrides,
+  };
+}
+
+interface Harness {
+  generator: Generator;
+  store: FakeStore;
+  snowflake: FakeSnowflake;
+  queue: FakeQueue;
+}
+
+function harness(
+  respond: Parameters<typeof fakeSnowflake>[0],
+  overrides: Partial<Config> = {},
+): Harness {
+  const store = fakeStore();
+  const snowflake = fakeSnowflake(respond);
+  const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+  const generator = createGenerator({ store, snowflake, config: config(overrides), queue });
+
+  return { generator, store, snowflake, queue };
+}
+
+describe('start', () => {
+  it('admits a cold repo and hands it to the queue without doing the work inline', async () => {
+    const { generator, queue, snowflake } = harness(() => CARD);
+
+    const outcome = await generator.start(SLUG);
+
+    expect(outcome).toMatchObject({ accepted: true, state: { status: 'generating' } });
+    expect(queue.enqueued.map((slug) => slug.slug)).toEqual(['atlas/pipeline']);
+    // The request path must not call Snowflake — that is the worker's job.
+    expect(snowflake.calls).toHaveLength(0);
+  });
+
+  it('serves a ready repo without queueing anything', async () => {
+    const { generator, queue, snowflake } = harness(() => CARD);
+    await generator.start(SLUG);
+    await queue.deliver();
+
+    const outcome = await generator.start(SLUG);
+
+    expect(outcome).toMatchObject({ accepted: false, reason: 'already_ready' });
+    expect(queue.enqueued).toHaveLength(0);
+    expect(snowflake.calls).toHaveLength(1);
+  });
+
+  it('refuses a second run while one is already in flight', async () => {
+    const { generator, queue } = harness(() => CARD);
+
+    await generator.start(SLUG);
+    const second = await generator.start(SLUG);
+
+    expect(second).toMatchObject({ accepted: false, reason: 'already_generating' });
+    expect(queue.enqueued).toHaveLength(1);
+  });
+
+  it('retries a generating marker left behind by a run that died', async () => {
+    const { generator, store, queue } = harness(() => CARD);
+    store.states.set('atlas/pipeline', {
+      status: 'generating',
+      repo: 'atlas/pipeline',
+      startedAt: new Date(Date.now() - 3_600_000).toISOString(),
+    });
+
+    const outcome = await generator.start(SLUG);
+
+    expect(outcome.accepted).toBe(true);
+    expect(queue.enqueued).toHaveLength(1);
+  });
+
+  it('refuses a repo whose failure is already cached', async () => {
+    const { generator, store, queue, snowflake } = harness(() => ({
+      status: 'failed' as const,
+      repo: 'atlas/pipeline',
+      errorCode: 'repo_not_found',
+    }));
+
+    await generator.start(SLUG);
+    await queue.deliver();
+    expect(store.states.get('atlas/pipeline')).toMatchObject({ errorCode: 'repo_not_found' });
+
+    const second = await generator.start(SLUG);
+
+    expect(second).toMatchObject({ accepted: false, reason: 'already_failed' });
+    expect(snowflake.calls).toHaveLength(1);
+  });
+
+  it('stops admitting repos once the daily cap is spent', async () => {
+    const { generator, queue } = harness(() => CARD, { dailyGenerationCap: 1 });
+
+    await generator.start(SLUG);
+    await queue.deliver();
+
+    const other = await generator.start(parseSlug('nyx/render-core'));
+
+    expect(other).toMatchObject({ accepted: false, reason: 'quota_exceeded' });
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('does not spend quota on a repo it refuses', async () => {
+    const { generator, store, queue } = harness(() => CARD);
+    await generator.start(SLUG);
+    await queue.deliver();
+
+    await generator.start(SLUG);
+
+    expect(store.quotaUsed).toBe(1);
+  });
+
+  it('marks the repo generating before the task is enqueued', async () => {
+    const { generator, store } = harness(() => CARD);
+
+    await generator.start(SLUG);
+
+    expect(store.writes).toEqual(['generating:atlas/pipeline']);
+  });
+});
+
+describe('run', () => {
+  it('renders the card Snowflake returned and writes it to the bucket', async () => {
+    const { generator, store, snowflake } = harness(() => CARD);
+
+    await generator.run(SLUG);
+
+    expect(snowflake.calls).toEqual(['atlas/pipeline']);
+    const written = store.cards.get('atlas/pipeline');
+    expect(written?.svg).toContain('<svg');
+    // The colour on the card is the colour Cortex chose, carried through untouched.
+    expect(written?.svg).toContain('#e8a04a');
+    expect(written?.payload.accent).toBe('#e8a04a');
+  });
+
+  it('caches a failure so a bad repo cannot be retried into a bill', async () => {
+    const { generator, store } = harness(() => ({
+      status: 'failed' as const,
+      repo: 'atlas/pipeline',
+      errorCode: 'repo_not_found',
+    }));
+
+    await generator.run(SLUG);
+
+    expect(store.states.get('atlas/pipeline')).toMatchObject({
+      status: 'failed',
+      errorCode: 'repo_not_found',
+    });
+    expect(store.cards.has('atlas/pipeline')).toBe(false);
+  });
+
+  it('records a failure rather than crashing when the warehouse throws', async () => {
+    const { generator, store } = harness(() => {
+      throw new Error('snowflake exploded');
+    });
+
+    await expect(generator.run(SLUG)).resolves.toBeUndefined();
+
+    expect(store.states.get('atlas/pipeline')).toMatchObject({
+      status: 'failed',
+      errorCode: 'pipeline_error',
+    });
+  });
+
+  it('clears the generating marker once the card lands', async () => {
+    const { generator, store, queue } = harness(() => CARD);
+
+    await generator.start(SLUG);
+    await queue.deliver();
+
+    expect(store.states.get('atlas/pipeline')).toBeUndefined();
+    expect(store.writes).toEqual(['generating:atlas/pipeline', 'card:atlas/pipeline']);
+  });
+});

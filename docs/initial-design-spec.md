@@ -4,174 +4,183 @@
 
 ## Thesis
 
-Commit Chronicles turns one public GitHub repository into a shareable commit story card. Paste a repo, generate the card, copy the image or README embed, and give the repo a small artifact that says what happened in its commit history.
+A contribution graph tells you that work happened. It never tells you what happened. Buried in a repo's commit history is usually exactly one story worth telling — a project that went dark for 107 days and came back at 3:32am, a repo built entirely after midnight whose last commit landed at 3:53 and never got another, a week where every commit was a revert.
 
-The product is scoped to repositories because a whole-profile year-in-review is harder to track, harder to explain, and easier to turn into mush. A repo has a clearer arc: commits start, cluster, pause, restart, or stop.
+Commit Chronicles finds that one story with SQL, narrates it with Cortex, and renders it as a card you can paste into a README.
+
+Scope is **one repository**, not a whole profile. A profile year-in-review turns to mush; a repo has a clean arc — commits start, cluster, pause, restart, or stop.
+
+**The product is the card. The site exists to make one.**
 
 ## What ships (V1)
 
-- A repository entry flow for public GitHub repos.
-- A durable generation state: `generating`, `ready`, or `failed`.
-- A generated social card image sized for README and social previews.
-- A copyable Markdown README embed for the generated card.
-- A cached public repo page at `/{owner}/{repo}`.
-- A generated SVG card endpoint at `/{owner}/{repo}/card.svg`.
-- A gallery of pre-generated repo cards for judge-safe demo coverage.
+- A repo entry flow for public GitHub repos (`owner/repo` or a URL).
+- A durable generation state: `generating`, `ready`, `failed`.
+- A generated SVG card sized for README and social previews.
+- A copyable Markdown embed.
+- A cached public page at `/{owner}/{repo}` and a card at `/{owner}/{repo}/card.svg`.
+- A gallery of pre-generated cards for judge-safe demo coverage.
+
+## The card
+
+1200×630 SVG, readable as a standalone artifact.
+
+- **Product mark** — `Commit Chronicles`.
+- **Kicker** naming the genre — `the death of a side project`, `the one that came back`.
+- **Headline** — Didone serif, the second clause italic and in the accent color.
+- **The arc** — a beeswarm scatter: date across, hour of day down, rotated so night sits at the bottom of the frame. Daylight commits render hollow, night commits solid. Long quiet stretches render as a **void panel** you look straight through. The last commit is a single accent dot.
+- **Status** — an observed label: `abandoned` (no commits in N days), `shipped 1.0.1`, `active`.
+- **Counts** — commits, span.
+- **Thesis line** — one sentence about the shape of the history.
+- **Attribution** — `read by Snowflake Cortex`.
+
+If the card would work equally well as a bar chart, it has failed.
+
+## Voice rules
+
+**Have an opinion.** A card that only describes is a report, and nobody shares a report. The whole product is the sentence that says what the shape *means* — "the commits got later and later, and then they stopped." Write that sentence.
+
+- **Interpret the arc. Never invent the facts.** Every timestamp, count, gap, and quoted message is real and derived from the ingested commits. Read the shape freely; do not manufacture events.
+- **Quote the commit messages.** They're the author's own words and they're the best material on the card. A repo that ends on `fix: rp my release please token readonly` at 3:53am tells you more than any adjective.
+- **Editorial, dry, literary.** Short sentences. It can be unsparing without being cruel, and confident without being hyperbolic.
+- No praise, no hype, no emoji, no exclamation marks. Restraint in tone; boldness in claim.
+- If the history genuinely has no story, say that. Don't manufacture drama out of six commits.
 
 ## User flow
 
-1. User enters a GitHub repo URL or `owner/repo`.
-2. Client normalizes the repo slug and subscribes to the Firestore card document.
-3. If the document is `ready`, the app renders the cached card immediately.
-4. If the document is missing or stale, the client calls the Cloud Run generation endpoint once.
-5. Cloud Run writes `generating` to Firestore and starts the GitHub/Snowflake/Cortex pipeline.
-6. The user can wait on the page or leave.
-7. When generation finishes, Cloud Run writes the final `ready` payload to Firestore.
-8. Returning later to `/{owner}/{repo}` reads the existing Firestore document and renders the result.
-9. The user copies either the card image or the README Markdown embed.
+1. User enters a repo.
+2. Client normalizes the slug and subscribes to the Firestore card document.
+3. `ready` → render the cached card immediately.
+4. Missing or stale → client calls `POST /api/generate` **once**.
+5. Cloud Run writes `generating`, then invokes the Snowflake pipeline.
+6. The user can wait or leave.
+7. Snowflake finishes; the payload is written back as `ready` (or `failed`).
+8. Returning to `/{owner}/{repo}` reads the existing document and renders.
+9. User copies the card image or the README embed.
 
-The browser tab must not be required for generation to complete. If it is, the app is just a loading spinner wearing a trench coat.
+The browser tab must not be required for generation to complete. If it is, the app is a loading spinner wearing a trench coat.
 
-## Product surface
+## Product surface (ready state)
 
-The ready screen prioritizes the artifact:
-
-- Repo address input, normalized as `commitchronicles.dev/{owner}/{repo}`.
-- Status text such as `Your card is ready`.
+- Repo address, normalized as `commitchronicles.dev/{owner}/{repo}`.
 - Large card preview.
-- Primary action: `Copy card image`.
-- Secondary action: `Copy README embed`.
-- Markdown preview:
+- Primary action: **Copy card image**.
+- Secondary action: **Copy README embed**.
   ```md
   [![Commit Chronicle](https://commitchronicles.dev/{owner}/{repo}/card.svg)](https://commitchronicles.dev/{owner}/{repo})
   ```
 - Link to read another repo.
 
-## Card content
-
-Each card should be readable as a standalone artifact:
-
-- Product mark: `Commit Chronicles`.
-- Repo slug.
-- Short factual subtitle.
-- Commit count.
-- Status or observed pattern label.
-- Main generated headline.
-- Compact timeline or scatter plot from public commits.
-- One short supporting sentence.
-- Attribution line such as `Read by Snowflake Cortex`.
-
-The tone can be editorial, but the claims must be grounded in observable commit data. Describe gaps, timestamps, bursts, reverts, commit types, and quiet periods. Do not infer intent, emotion, dedication, burnout, abandonment, or motivation unless the commit messages literally say it.
-
 ## Data source
 
-Public GitHub commit data fetched by the API layer:
+The GitHub REST **Commits API** — `/repos/{owner}/{repo}/commits`. Public repos only.
 
-- Use GitHub APIs to validate the repo and fetch public commits.
-- Ingest only public commit messages, commit SHA, authored timestamp, author login when public, and repo metadata needed for display.
-- Cap commits before Snowflake work begins.
-- Filter obvious bot or generated noise before costly Cortex calls when possible.
+**Do not use the Activity Events API.** GitHub stripped commit summaries and counts from `PushEvent` payloads on 7 Oct 2025, which also guts every GH-Archive mirror of it. Commit text now survives only in the main REST API.
 
-Do not use the Snowflake Marketplace archive for V1. The live product depends on user-submitted repos and Cortex output, not whole-population percentile math.
+Ingest: commit message, SHA, authored timestamp, author login when public. Cap commits per repo. Filter obvious bot noise before anything expensive runs.
+
+The Snowflake Marketplace archive is not used in V1. This product is about one submitted repo and its Cortex reading, not whole-population percentile math.
 
 ## Architecture
 
-- **Firebase Hosting** serves the embed-friendly React SPA.
-- **Firestore** is the cache of record and the serving database.
-- **Cloud Run** owns generation endpoints and all privileged writes.
-- **Snowflake Cortex AISQL** classifies, filters, and aggregates commit text during generation only.
-
 ```text
-Browser
-  -> Firestore subscribe repoCards/{ownerRepoKey}
-  -> Cloud Run POST /api/generate on missing/stale doc
-
-Cloud Run
-  -> write generating doc
-  -> fetch GitHub repo commits
-  -> run Snowflake Cortex AISQL
-  -> write ready or failed doc
-
-Browser
-  -> realtime update or later revisit
-  -> render cached repo card
+Cloud Run  (SPA + /api/generate + /card.svg — no analysis logic)
+   │  POST /api/generate → write generating → invoke Snowflake proc
+   ▼
+Snowflake
+   ├─ ingest proc   external access → api.github.com → COMMITS_RAW
+   ├─ detector      plain SQL → score storylines → pick ONE
+   ├─ cortex        narrate that thread + choose the palette
+   └─ payload       → back to Firestore as `ready`
+   │
+Firestore  (cache of record; serving every cached page + card)
 ```
 
-## Firestore cache
+- **Cloud Run** owns the routes and all privileged writes. It fetches nothing and analyses nothing.
+- **Snowflake** reaches GitHub itself, via an external access integration. The ingest layer is a stored procedure, not a service.
+- **Firestore** is the cache of record. A cached page or card never re-runs Cortex.
 
-Document path:
+Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are RBAC-gated and hand a browser a login page. Cloud Run serves the card.
 
-```text
-repoCards/{ownerRepoKey}
-```
+## Snowflake objects
 
-`ownerRepoKey` is derived from normalized lowercase `owner/repo` without allowing user-controlled path separators.
+| object | job |
+|---|---|
+| `NETWORK RULE` (EGRESS, `api.github.com`) | let the warehouse out |
+| `SECRET` | GitHub token |
+| `EXTERNAL ACCESS INTEGRATION` | binds rule + secret |
+| `COMMITS_RAW` | owner, repo, sha, message, authored_at |
+| `PROC ingest_commits(owner, repo)` | Python + external access → Commits API → `COMMITS_RAW` |
+| detector views | gaps, streaks, hour histogram, storyline scores |
+| `PROC read_repo(owner, repo)` | detector → Cortex → structured card payload |
+| `TASK` | scheduled regeneration for the gallery |
 
-Minimum fields:
+Every object is SQL in the repo, deployed with the `snow` CLI. An object created by clicking in a UI does not exist.
 
-```ts
+## The detector (plain SQL, no LLM)
+
+This is the core of the product and the core of the Snowflake case. Score every candidate storyline deterministically; keep the highest. Surveying a repo's whole history produces a report. Picking one story produces an argument.
+
+| storyline | signal |
+|---|---|
+| **relapse** | `LAG` over commit dates — quiet ≥ N days, then resumed |
+| **nocturne** | share of commits after 22:00 |
+| **binge** | longest consecutive-day streak, or the heaviest single night |
+| **collapse** | a spike, then permanent silence |
+| **fight** | a cluster of reverts/hotfixes in a short window (regex — no AI needed) |
+| **resurrection** | quiet, resumed, and shipped a release |
+
+Apply floors — a storyline needs a minimum number of real commits so bot noise can't win. Scoring is deterministic: the same repo always yields the same story.
+
+Cheap, explainable, and it means Cortex is only ever pointed at the part that matters.
+
+## Cortex
+
+One call, fed **only the winning storyline's evidence**: ~10–20 real commit messages plus the computed facts. Never the whole history — that's how you buy an expensive, unfocused paragraph.
+
+```json
 {
-  owner: string;
-  repo: string;
-  repoSlug: string;
-  status: 'generating' | 'ready' | 'failed';
-  payload: RepoCardPayload | null;
-  errorCode: string | null;
-  requestedAt: Timestamp;
-  updatedAt: Timestamp;
-  generatedAt: Timestamp | null;
-  expiresAt: Timestamp | null;
-  sourceWindow: { from: string; to: string };
-  cost: {
-    commitCount: number;
-    cortexQueryIds: string[];
-  };
+  "kicker": "the death of a side project",
+  "headline": "Born in daylight. Its last commit landed at 3:53 in the morning.",
+  "thesis": "The commits got later and later, and then they stopped.",
+  "status": "abandoned",
+  "accent": "#e2695e",
+  "accent_reason": "ember — a repo that ran hot and went out"
 }
 ```
 
-Client reads may be public for launch because the underlying source is public repo commit data. Client writes are forbidden; only Cloud Run writes status and payload fields.
+**Cortex chooses the palette.** The accent is a reading of the arc, not a brand constant: a repo that went quiet and a repo that came back and shipped must not wear the same color.
 
-## Cortex pipeline
-
-1. `AI_CLASSIFY` tags commit messages into categories such as feature, fix, refactor, docs, test, chore, and revert.
-2. Plain SQL computes commit counts, active days, time-of-day patterns, quiet gaps, first/last commit, and type mix.
-3. `AI_FILTER` identifies commits that describe reverts, hotfixes, breakage, or other narrative anchors.
-4. `AI_AGG` generates constrained card copy from the classified and aggregated repo history.
-5. SQL returns a structured payload for the card renderer.
-
-Output is frozen into Firestore. Serving a shared repo page or card image never re-runs Cortex.
+Narration constraints: use only the supplied facts and invent nothing — then say what they mean (see Voice rules).
 
 ## Why it wins "Best use of Snowflake"
 
-The Snowflake story is Cortex AISQL as the engine for turning unstructured commit messages into a compact public artifact:
+- Snowflake **reaches out and gets its own data** — external access integration, no ingestion service.
+- Plain SQL — window functions, gaps, streaks, histograms — **finds the story**. The warehouse is the editor, not a bucket the LLM reads from.
+- Cortex narrates the one thread and picks the palette.
+- Cheap by construction: detection costs nothing; the LLM sees twenty commits, not twenty thousand.
 
-- `AI_CLASSIFY` labels commit messages at row level.
-- `AI_FILTER` acts as a semantic predicate for commits worth surfacing.
-- `AI_AGG` reduces the repo's commit history into concise card copy.
-- SQL computes the visible chart data and proof metrics.
-
-The app should make the Snowflake proof visible without making the card feel like a dashboard. The writeup should show the SQL. Do not bury the expensive toy after buying it.
+Show the SQL in the writeup. Do not bury the expensive toy after buying it.
 
 ## Cost and abuse controls
 
-- Snowflake and Cortex run only on cache miss or manual refresh.
-- Firestore serves every cached page view and generated card request.
-- Cloud Run owns generation and can finish after the user leaves.
-- Cache failed states to prevent repeated expensive retries for bad repos.
+- Detection is plain SQL. Cortex only ever sees the winning thread.
+- Snowflake runs on cache miss or manual refresh only; Firestore serves everything else.
+- Cloud Run scales to zero.
+- Cap commits per repo; hard-cap daily generations.
+- Cache `failed` states so a bad repo can't be retried into a bill.
 - Reject duplicate generation while a recent `generating` record exists.
-- Hard-cap live generations per day.
-- Hard-cap commits per repo.
 - Reject private, missing, empty, or oversized repos with clear failed states.
-- Use the smallest viable Snowflake warehouse with auto-suspend and statement timeouts.
-- Track Cortex query IDs in the Firestore document for cost audit.
-- Pre-generate gallery repo cards.
+- Smallest viable warehouse, auto-suspend, statement timeouts.
+- Track Cortex query IDs on the document for cost audit.
+- Pre-generate gallery cards.
 
 ## Known caveats
 
-1. Public commit messages are uneven; quiet or merge-heavy repos may produce sparse cards.
-2. The card is descriptive, not causal. It must not infer developer motivation.
-3. Generation can take tens of seconds. That is acceptable because the result is durable and revisit-safe.
-4. Sparse repos need a template fallback instead of forced Cortex prose.
+1. GitHub proxies README images through camo, so webfonts will not load in the card. Fonts must be base64-embedded as a subset.
+2. The beeswarm offsets commits horizontally to avoid overplotting. The hour is exact; the day is accurate to within the cluster width. Disclose it.
+3. A quiet or merge-heavy repo may have no story. Say so plainly rather than manufacturing one — sparse repos get a template fallback, not forced Cortex prose.
+4. Generation takes tens of seconds. Acceptable, because the result is durable and revisit-safe.
 5. README embeds need stable image rendering and cache headers, or the neat trick becomes a broken badge.
 
 ## Labels

@@ -49,13 +49,14 @@ If the card would work equally well as a bar chart, it has failed.
 ## User flow
 
 1. User enters a repo.
-2. Client normalizes the slug and subscribes to the Firestore card document.
-3. `ready` → render the cached card immediately.
+2. Client normalizes the slug; Cloud Run checks the bucket for an existing card.
+3. `ready` (the card object exists) → render the cached card immediately.
 4. Missing or stale → client calls `POST /api/generate` **once**.
-5. Cloud Run writes `generating`, then invokes the Snowflake pipeline.
+5. Cloud Run marks the job `generating`, then invokes the Snowflake pipeline.
 6. The user can wait or leave.
-7. Snowflake finishes; the payload is written back as `ready` (or `failed`).
-8. Returning to `/{owner}/{repo}` reads the existing document and renders.
+7. Snowflake returns the card payload; Cloud Run renders the SVG and writes it to the
+   bucket (or records `failed`).
+8. Returning to `/{owner}/{repo}` finds the existing card and renders it.
 9. User copies the card image or the README embed.
 
 The browser tab must not be required for generation to complete. If it is, the app is a loading spinner wearing a trench coat.
@@ -85,20 +86,25 @@ The Snowflake Marketplace archive is not used in V1. This product is about one s
 
 ```text
 Cloud Run  (static SPA + /api/generate — no analysis logic)
-   │  POST /api/generate → invoke Snowflake proc
+   │  POST /api/generate → CALL READ_REPO(owner, repo)
    ▼
 Snowflake
    ├─ ingest proc   external access → api.github.com → COMMITS
    ├─ detector      plain SQL → score storylines → pick ONE
-   ├─ cortex        narrate that thread + choose the palette
-   └─ card proc     renders SVG → writes to the GCS stage
+   └─ cortex        narrate that thread + choose the palette
    │
+   │  ◄── card payload (JSON)
+   ▼
+Cloud Run  templates the SVG → writes gs://…/{owner}/{repo}/card.svg
+   ▼
 Public GCS bucket  (serving every cached page + card; the file's existence is the state)
 ```
 
-- **Cloud Run** owns the routes, calls one Snowflake proc, and polls the bucket. It fetches nothing, computes nothing, and stores nothing.
-- **Snowflake** reaches GitHub itself, via an external access integration. The ingest layer is a stored procedure, not a service.
+- **Snowflake** reaches GitHub itself via an external access integration, finds the story in SQL, and narrates it with Cortex. The ingest layer is a stored procedure, not a service.
+- **Cloud Run** owns the routes, calls one Snowflake proc, and turns the returned payload into an SVG. It fetches no commit data and computes no analysis.
 - **The GCS bucket** is the cache of record. A cached page or card never re-runs Cortex.
+
+**Rendering lives in Cloud Run, not Snowflake.** Templating an SVG string is a chore, not a demonstration of a data warehouse — and doing it in-warehouse would drag a `STORAGE INTEGRATION`, an external stage, and a Snowflake-minted service-account IAM grant onto the critical path to buy nothing. The Snowflake case rests on the ingest, the detector, and the Cortex call. Cloud Run writes to the bucket with ordinary GCP credentials.
 
 Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are RBAC-gated and hand a browser a login page. Cloud Run serves the card.
 
@@ -106,13 +112,15 @@ Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are
 
 | object | job |
 |---|---|
-| `NETWORK RULE` (EGRESS, `api.github.com`) | let the warehouse out |
-| `SECRET` | GitHub token |
-| `EXTERNAL ACCESS INTEGRATION` | binds rule + secret |
-| `COMMITS_RAW` | owner, repo, sha, message, authored_at |
-| `PROC ingest_commits(owner, repo)` | Python + external access → Commits API → `COMMITS_RAW` |
-| detector views | gaps, streaks, hour histogram, storyline scores |
-| `PROC read_repo(owner, repo)` | detector → Cortex → structured card payload |
+| `GITHUB_API_RULE` (EGRESS, `api.github.com`) | let the warehouse out |
+| `GITHUB_TOKEN` (`SECRET`) | GitHub token |
+| `GITHUB_API_ACCESS` (`EXTERNAL ACCESS INTEGRATION`) | binds rule + secret |
+| `COMMITS` | owner, repo, sha, subject, body, authored_at, bot/AI flags |
+| `COMMITS_CLEAN` (view) | drops merges and bots; derives date + hour parts |
+| `PROC INGEST_REPO_COMMITS(owner, repo)` | Python + external access → Commits API → `COMMITS` |
+| detector views | gaps, streaks, night share, storyline scores → `REPO_STORYLINE` |
+| `CARD_EVIDENCE` (view) | the winning thread's ~20 commits — the only thing Cortex sees |
+| `PROC READ_REPO(owner, repo)` | detector → Cortex → structured card payload |
 | `TASK` | scheduled regeneration for the gallery |
 
 Every object is SQL in the repo, deployed with the `snow` CLI. An object created by clicking in a UI does not exist.
@@ -165,7 +173,7 @@ Show the SQL in the writeup. Do not bury the expensive toy after buying it.
 ## Cost and abuse controls
 
 - Detection is plain SQL. Cortex only ever sees the winning thread.
-- Snowflake runs on cache miss or manual refresh only; Firestore serves everything else.
+- Snowflake runs on cache miss or manual refresh only; the bucket serves everything else.
 - Cloud Run scales to zero.
 - Cap commits per repo; hard-cap daily generations.
 - Cache `failed` states so a bad repo can't be retried into a bill.

@@ -9,17 +9,23 @@
 
 ## Architecture
 ```
-Cloud Run (static SPA + one route, no logic)
-   │  type a handle → POST /api/generate ───────────────┐
-   │  poll the bucket for the card ◄───────────┐        │
-   ▼                                           │        ▼
-public GCS bucket ──► README <img>             │   Snowflake
-                      dev.to embed             │     ├─ ingest proc   external access → api.github.com → COMMITS_RAW
-                                               │     ├─ detector      plain SQL: gaps, streaks, hours → pick ONE thread
-                                               │     ├─ cortex        narrates it + picks the palette (hex + mood)
-                                               │     └─ card proc     renders SVG → writes to the GCS stage ─┘
+Cloud Run (static SPA + one route, no analysis)
+   │  type owner/repo → POST /api/generate ──────────────┐
+   │                                                     ▼
+   │                                                Snowflake
+   │                                                  ├─ ingest proc   external access → api.github.com → COMMITS
+   │                                                  ├─ detector      plain SQL: gaps, streaks, hours → pick ONE thread
+   │                                                  └─ cortex        narrates it + picks the palette (hex + mood)
+   │                                                     │
+   │  ◄── card payload (JSON) ────────────────────────────┘
+   ▼
+Cloud Run renders the SVG → writes it to the bucket
+   ▼
+public GCS bucket ──► README <img> · dev.to embed
 ```
-Cloud Run serves the page, calls one Snowflake proc, and watches the bucket. It stores nothing and computes nothing. **The card in the bucket is the state** — if the file exists, it's ready.
+Snowflake gets its own data, finds the story, and reads it. Cloud Run serves the page, calls one proc, and turns the payload into an SVG. **The card in the bucket is the state** — if the file exists, it's ready.
+
+**Rendering is Cloud Run's job, not Snowflake's.** Templating an SVG proves nothing about a warehouse, and doing it in-warehouse would put a `STORAGE INTEGRATION`, an external stage, and a service-account IAM grant on the critical path for zero narrative gain. Cloud Run has to exist anyway; it writes to GCS with ordinary credentials.
 
 ## Tooling
 - **Snowflake MCP (self-hosted, `Snowflake-Labs/mcp`)** — Cortex plus object management and SQL orchestration. This is what lets Claude create the network rule, secret, integration, procs, and task.
@@ -27,17 +33,20 @@ Cloud Run serves the page, calls one Snowflake proc, and watches the bucket. It 
 - **`snow` CLI** — every object lives as SQL in the repo and deploys with one command. Reproducible, reviewable, and it's what the writeup screenshots.
 
 ## Snowflake objects (the whole app)
-| object | job |
-|---|---|
-| `NETWORK RULE` (EGRESS, `api.github.com`) | let the warehouse out |
-| `SECRET` | GitHub token |
-| `EXTERNAL ACCESS INTEGRATION` | binds rule + secret |
-| `STORAGE INTEGRATION` + `STAGE` (`gcs://…`) | where the card lands |
-| `PROC ingest_commits(handle)` | Python + external access → REST Commits API → `COMMITS_RAW` |
-| `COMMITS_RAW` | handle, repo, sha, message, authored_at |
-| detector views | gaps, streaks, hour histogram, drama scores |
-| `PROC render_card(handle, repo)` | SVG string → write to stage |
-| `TASK` | scheduled regeneration |
+| object | job | status |
+|---|---|---|
+| `GITHUB_API_RULE` (EGRESS, `api.github.com`) | let the warehouse out | ✅ deployed |
+| `GITHUB_TOKEN` (`SECRET`) | GitHub token | ✅ deployed |
+| `GITHUB_API_ACCESS` (`EXTERNAL ACCESS INTEGRATION`) | binds rule + secret | ✅ deployed |
+| `COMMITS` | owner, repo, sha, subject, body, authored_at, bot/AI flags | ✅ deployed |
+| `PROC INGEST_REPO_COMMITS(owner, repo)` | Python + external access → REST Commits API → `COMMITS` | ✅ deployed |
+| `COMMITS_CLEAN` (view) | drops merges + bots, derives date/hour parts | ✅ deployed |
+| detector views | gaps, streaks, night share, drama scores → one winner | 🔨 `snowflake/detector.sql` |
+| `CARD_EVIDENCE` (view) | the winning thread's ~20 commits — all Cortex ever sees | 🔨 `snowflake/detector.sql` |
+| `PROC READ_REPO(owner, repo)` | detector → Cortex → card payload JSON | ⬜ next |
+| `TASK` | scheduled regeneration | ⬜ cuttable |
+
+No `STORAGE INTEGRATION` and no external stage — Cloud Run owns the bucket.
 
 ## Stage 1 — the detector (plain SQL, no LLM, free)
 Score candidate threads, pick the single most dramatic **true** one:
@@ -63,9 +72,9 @@ Feed **only the winning thread's evidence** — ~10–20 real commit messages pl
 **Cortex picks the palette.** The color is a judgment about the arc, not a brand constant — a project that died and one that shipped must not wear the same color.
 
 ## Stage 3 — the card
-`render_card` templates an SVG (1200×630) from the Cortex JSON plus the plotted commits, and writes it to the GCS stage. The public bucket serves it.
+Cloud Run templates an SVG (1200×630) from the Cortex JSON plus the plotted commits, and writes it to the public GCS bucket.
 
-**Design** — see `design-directive.md` and `mockup.html`:
+**Design:**
 - Didone headline with the italic half in the accent · mono kicker naming the genre · status label (`abandoned` / `shipped 1.0.1`).
 - **The arc is the card:** beeswarm scatter, date across and hour down, night at the bottom. Daylight commits hollow, night commits solid. The dead stretch is a **void panel** you look through. The final commit is one accent dot.
 - One thesis line at the foot. It **interprets** — that's the point.
@@ -77,7 +86,7 @@ Detection is free SQL. Cortex sees ~20 commits, not thousands. Cloud Run scales 
 - **Fri night — THE GATE.** MCP + `snow` CLI connected. Prove two things: external access can reach `api.github.com` from inside a proc, and Cortex AISQL runs in your region. Nothing else matters until both are green.
 - **Sat AM** — `ingest_commits` → `COMMITS_RAW` for one handle.
 - **Sat PM** — detector SQL. Confirm it picks `my-hermantic-agent` (nocturne/collapse) and `rai-lint` (resurrection) unaided.
-- **Sun AM** — Cortex call (headline, thesis, accent); `render_card` → SVG → GCS.
+- **Sun AM** — Cortex call (headline, thesis, accent) via `READ_REPO`; Cloud Run renders the SVG → GCS.
 - **Sun PM** — Cloud Run shell + `/api/generate`; confirm the card renders in a real README and the page embeds in a dev.to draft.
 - **Sun night** — writeup: the detector SQL, the Cortex call, the `snow` deploy. Cards are the demo.
 - **Mon early** — submit with buffer.

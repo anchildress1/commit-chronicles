@@ -44,10 +44,11 @@ Canonical instruction source for this repository. Treat this file as authoritati
 
 ## Project: Commit Chronicles
 
-Paste a GitHub handle, start a generation job, wait or come back later, then get a
-shareable commit memoir built from public commit messages. GitHub commit data is
-ingested by the API layer, processed through Snowflake Cortex AISQL, and cached in
-Firestore. See `docs/initial-design-spec.md` for the full product spec.
+Paste a public GitHub repo (`owner/repo`), start a generation job, wait or come back
+later, then get a shareable commit story card plus a copyable README embed. GitHub
+commit data for that repo is fetched by the API layer, processed through Snowflake
+Cortex AISQL, and cached in Firestore. See `docs/initial-design-spec.md` for the full
+product spec.
 
 ### Stack
 
@@ -62,8 +63,10 @@ Firestore. See `docs/initial-design-spec.md` for the full product spec.
 
 ### Layout
 
-- `src/` — React SPA (`main.tsx`, `App.tsx`), unit tests colocated as `*.test.tsx`.
-- `worker/` — Worker entrypoint + API routes, unit tests colocated as `*.test.ts`.
+- `src/` — React SPA (`main.tsx`, `App.tsx`).
+- `worker/` — Worker entrypoint + API routes.
+- `test/` — unit tests, mirroring source: `test/src/` for `src/`, `test/worker/`
+  for `worker/`. Not colocated with source files.
 - `e2e/` — Playwright specs.
 - `index.html` — Vite entry at repo root.
 
@@ -100,18 +103,19 @@ Run everything through `make` (delegates to pnpm):
 
 ## Application Logic
 
-- User flow is handle-first: enter a public GitHub username, submit once, and create
-  or resume a Firestore-backed generation record.
+- User flow is repo-first: enter a public `owner/repo`, submit once, and create or
+  resume a Firestore-backed generation record at `repoCards/{ownerRepoKey}`.
 - Generation continues after submission even if the user leaves the page.
-- Returning to `/?handle=<name>` must attach to the existing Firestore record and show
+- Returning to `/{owner}/{repo}` must attach to the existing Firestore record and show
   `generating`, `ready`, or `failed` state.
 - The serving path reads Firestore only. Snowflake and GitHub are never called on a
-  normal render of a cached chronicle.
-- The API layer is responsible for writing generation status and final output back to
-  Firestore.
+  normal render of a cached repo page or card.
+- Cloud Run is the only writer of generation status and final payload to Firestore;
+  client writes are forbidden.
 - Cortex output must be descriptive and fact-constrained. Do not infer motivation.
-- Cost guards are mandatory: cap repos, cap commits per repo, cap daily live
-  generations, cache failures, and keep gallery records pre-generated.
+- Cost guards are mandatory: cap commits per repo, cap daily live generations, cache
+  failed states, reject private/missing/oversized repos, and keep gallery records
+  pre-generated.
 
 ## Documentation
 

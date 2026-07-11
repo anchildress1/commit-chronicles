@@ -20,5 +20,5 @@
 
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["worker"]
+  "include": ["worker", "test/worker"]
 }

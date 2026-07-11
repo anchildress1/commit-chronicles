@@ -6,13 +6,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./src/setup-tests.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'worker/**/*.{test,spec}.ts'],
+    setupFiles: ['./test/setup-tests.ts'],
+    include: ['test/**/*.{test,spec}.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['src/**/*.{ts,tsx}', 'worker/**/*.ts'],
-      exclude: ['src/main.tsx', 'src/vite-env.d.ts', '**/*.{test,spec}.{ts,tsx}'],
+      exclude: ['src/main.tsx', 'src/vite-env.d.ts'],
       thresholds: {
         lines: 85,
         functions: 85,

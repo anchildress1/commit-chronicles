@@ -11,7 +11,7 @@ export default defineConfig([
   js.configs.recommended,
   tseslint.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}'],
+    files: ['src/**/*.{ts,tsx}', 'test/src/**/*.{ts,tsx}', 'test/setup-tests.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
@@ -26,7 +26,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['worker/**/*.ts'],
+    files: ['worker/**/*.ts', 'test/worker/**/*.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.worker,

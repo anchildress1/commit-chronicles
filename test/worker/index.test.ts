@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import app from './index';
+import app from '../../worker/index';
 
 describe('worker', () => {
   it('GET /api/health returns ok', async () => {

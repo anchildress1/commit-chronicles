@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS COMMITS (
   EMAIL          STRING,
   SUBJECT        STRING,
   BODY           STRING,
-  AUTHORED_AT    TIMESTAMP_TZ NOT NULL,   -- keeps the committer's original UTC offset
+  AUTHORED_AT    TIMESTAMP_TZ NOT NULL,   -- author date; GitHub's REST API normalizes this to UTC,
+                                           -- the original commit's local offset is not recoverable here
   COMMITTED_AT   TIMESTAMP_TZ,
   PARENT_COUNT   NUMBER(2,0),             -- >1 = merge
   IS_BOT         BOOLEAN      DEFAULT FALSE,  -- automated account (dependabot, CI), not a person
@@ -44,24 +45,41 @@ CREATE TABLE IF NOT EXISTS COMMITS (
 );
 
 -- Migrate the old combined REPO ('owner/name') column into REPO_OWNER/REPO_NAME.
--- No-ops on a fresh table (REPO never existed) or once already migrated.
+-- True no-op on a fresh table: the UPDATE only runs if REPO actually exists,
+-- since referencing a missing column in a plain UPDATE is a compile error,
+-- not a silently-skipped no-op.
 ALTER TABLE COMMITS ADD COLUMN IF NOT EXISTS REPO_OWNER STRING;
 ALTER TABLE COMMITS ADD COLUMN IF NOT EXISTS REPO_NAME STRING;
-UPDATE COMMITS SET
-  REPO_OWNER = SPLIT_PART(REPO, '/', 1),
-  REPO_NAME  = SPLIT_PART(REPO, '/', 2)
-WHERE REPO_OWNER IS NULL AND REPO IS NOT NULL;
+EXECUTE IMMEDIATE $$
+BEGIN
+  LET repo_col_exists INTEGER := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = 'RAW' AND TABLE_NAME = 'COMMITS' AND COLUMN_NAME = 'REPO'
+  );
+  IF (repo_col_exists > 0) THEN
+    UPDATE COMMITS SET
+      REPO_OWNER = SPLIT_PART(REPO, '/', 1),
+      REPO_NAME  = SPLIT_PART(REPO, '/', 2)
+    WHERE REPO_OWNER IS NULL AND REPO IS NOT NULL;
+  END IF;
+  RETURN 'ok';
+END;
+$$;
 ALTER TABLE COMMITS DROP COLUMN IF EXISTS REPO;
 ALTER TABLE COMMITS ALTER COLUMN REPO_OWNER SET NOT NULL;
 ALTER TABLE COMMITS ALTER COLUMN REPO_NAME SET NOT NULL;
 
 -- 5. The detector's input. Filtering + derived time parts. No parsing.
+-- UTC_HOUR/UTC_DOW, not local: GitHub's commits API returns author dates
+-- normalized to UTC, so the nocturne/hour-of-day signal is systematically
+-- wrong for non-UTC authors until ingestion pulls offsets from the Git Data
+-- API instead. Known gap, not fixed here — see PR review discussion.
 CREATE OR REPLACE VIEW COMMITS_CLEAN AS
 SELECT
     REPO_OWNER, REPO_NAME, SHA, AUTHOR, EMAIL, SUBJECT, BODY, AUTHORED_AT, IS_AI_ASSISTED,
     DATE(AUTHORED_AT)    AS AUTHORED_DATE,
-    HOUR(AUTHORED_AT)    AS LOCAL_HOUR,
-    DAYNAME(AUTHORED_AT) AS LOCAL_DOW
+    HOUR(AUTHORED_AT)    AS UTC_HOUR,
+    DAYNAME(AUTHORED_AT) AS UTC_DOW
 FROM COMMITS
 WHERE PARENT_COUNT <= 1                      -- merges are bookkeeping, not confession
   AND NOT IS_BOT                             -- flagged at ingestion, not guessed here

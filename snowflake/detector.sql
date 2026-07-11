@@ -377,13 +377,23 @@ WITH picked AS (
         c.REPO_OWNER, c.REPO_NAME, c.SUBJECT, c.AUTHORED_AT, c.UTC_HOUR, c.IS_AI_ASSISTED
     FROM COMMITS_CLEAN c
     JOIN REPO_STORYLINE w USING (REPO_OWNER, REPO_NAME)
+    -- The pivot window only exists when there IS a pivot. A 'none' storyline has a NULL
+    -- PIVOT_AT, which makes ABS(DATEDIFF(...)) NULL for every row — the whole partition
+    -- ties, and ROW_NUMBER then picks twelve commits arbitrarily and differently each
+    -- run. A no-story repo gets its opening and its ending, which is all it has.
+    --
+    -- AUTHORED_AT is the tiebreak, not decoration: two commits equidistant from the
+    -- pivot tie as well, and an arbitrary winner there is the same bug wearing a smaller
+    -- hat. Scoring is deterministic or it is not a detector.
     QUALIFY
-        ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
-                           ORDER BY ABS(DATEDIFF(hour, w.PIVOT_AT, c.AUTHORED_AT))) <= 12
+        (w.PIVOT_AT IS NOT NULL
+         AND ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
+                                ORDER BY ABS(DATEDIFF(hour, w.PIVOT_AT, c.AUTHORED_AT)),
+                                         c.AUTHORED_AT) <= 12)
      OR ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
-                           ORDER BY c.AUTHORED_AT) <= 3
+                           ORDER BY c.AUTHORED_AT, c.SHA) <= 3
      OR ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
-                           ORDER BY c.AUTHORED_AT DESC) <= 5
+                           ORDER BY c.AUTHORED_AT DESC, c.SHA) <= 5
 )
 SELECT
     w.REPO_OWNER,

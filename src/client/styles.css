@@ -187,6 +187,9 @@ body {
   line-height: 1.02;
   letter-spacing: -0.016em;
   margin: 0;
+  /* A repo slug is one unbreakable token to the browser, and this face is sized in vw.
+     Without a break rule a long owner/repo runs straight off the edge of the page. */
+  overflow-wrap: anywhere;
 }
 
 .display em {
@@ -425,6 +428,11 @@ body {
   margin-bottom: 38px;
 }
 
+.result__head h2 {
+  max-width: 24ch;
+  margin-inline: auto;
+}
+
 .result__grid {
   display: grid;
   grid-template-columns: minmax(0, 660px) minmax(0, 320px);
@@ -480,6 +488,8 @@ body {
 }
 
 .embed {
+  display: block;
+  overflow-wrap: anywhere;
   background: #0c111c;
   border: 1px solid rgba(238, 241, 247, 0.12);
   border-radius: 10px;

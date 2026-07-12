@@ -16,13 +16,17 @@ Paste a public GitHub repo. **Snowflake fetches its own commit history, finds th
 
 > **Judging scope: `v1.0.0` is the challenge submission.** It was cut for the DEV Weekend Challenge deadline and is the only thing that should be judged. The repo was created on 10 Jul 2026 and everything in the entry was built inside the challenge window — the badges above are the receipt. Any commit or release after `v1.0.0` is post-deadline work and is not part of the entry.
 
-Three real repos, three storylines the detector found unaided — a **binge**, a **nocturne**, and a **relapse**. Every dot, timestamp, and quoted commit below is real:
+Two real repos, two storylines the detector found unaided — a **binge** and a **nocturne**. Every dot, timestamp, and quoted commit is real:
 
 [![save-the-sun](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/save-the-sun/card.svg)](https://commitchronicles.anchildress1.dev/anchildress1/save-the-sun)
 
 [![carbon-trace](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/carbon-trace/card.svg)](https://commitchronicles.anchildress1.dev/anchildress1/carbon-trace)
 
-[![legacy-smelter](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/legacy-smelter/card.svg)](https://commitchronicles.anchildress1.dev/anchildress1/legacy-smelter)
+And a third, which is the one that proves the other two. `forem/forem` has 463 commits and **no story** — a team repo with continuous CI has no personal arc to find. It says so, in grey, and Cortex is never called:
+
+[![forem/forem](https://storage.googleapis.com/commit-chronicles-cards/cards/forem/forem/card.svg)](https://commitchronicles.anchildress1.dev/forem/forem)
+
+A product that cannot return nothing will invent something. This one returns nothing.
 
 ---
 
@@ -67,7 +71,7 @@ Two rules hold the product together:
 | **Durable generation**          | Work runs on a Cloud Tasks worker request, so closing the tab doesn't kill the job. Come back later to `/{owner}/{repo}` and re-attach.     |
 | **Six-storyline SQL detector**  | `relapse`, `nocturne`, `binge`, `collapse`, `fight`, `resurrection` — scored deterministically, exactly one winner, plus a `none` fallback. |
 | **One Cortex call**             | The winning thread's evidence only, never the whole history. Schema-constrained output.                                                     |
-| **Cortex picks the palette**    | The accent hex is a reading of the arc. A repo that died and one that came back and shipped must not wear the same colour.                  |
+| **Cortex picks the palette**    | The accent hex is a reading of the arc, chosen from five muted neons, with the reason recorded on the card row.                             |
 | **Copyable README embed**       | The card is a public bucket object. Hotlink it from anywhere.                                                                               |
 | **Cost guards by construction** | Daily cap, in-flight dedupe, cached failures, queue-level concurrency ceiling, ingest cap.                                                  |
 

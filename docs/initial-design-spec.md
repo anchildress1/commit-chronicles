@@ -21,7 +21,7 @@ Scope is **one repository**, not a whole profile. A profile year-in-review turns
 - A generated SVG card sized for README and social previews.
 - A copyable Markdown embed.
 - A cached public page at `/{owner}/{repo}` and a card served directly from the public GCS bucket.
-- Three pre-generated example repos on the landing page, for judge-safe demo coverage.
+- Three pre-generated example repos on the landing page, for judge-safe demo coverage. Two carry a storyline; `forem/forem` deliberately carries none — the honest-negative case is part of the demo, not an omission from it.
 
 **Cut:** the gallery route. Three example chips on the landing page cover the same need — a judge who wants a card without waiting for one — at a fraction of the surface area.
 
@@ -316,17 +316,17 @@ Nine keys. That is the whole surface area of the writing on the card — **not**
 
 **Cortex chooses the palette.** One `accent` hex paints every accent-coloured element on the card: kicker slug, italic headline fragment, last-commit dot, arrow, void-panel rule, attribution bullet. It is a reading of the arc, not a brand constant: a repo that went quiet and a repo that came back and shipped must not wear the same colour.
 
-The palette is **muted neons** — bright but not fluorescent, saturated but not raw. Anchor hues on the spectrum:
+The palette is five muted neons. Cortex picks one, and the choice is a reading of the arc:
 
-| hex       | family      | reads as                 |
-| --------- | ----------- | ------------------------ |
-| `#e8a04a` | muted amber | burn, heat, ember        |
-| `#e56b5a` | muted coral | conflict, alarm, warning |
-| `#d3e85a` | muted lime  | return, growth, life     |
-| `#7fe4c5` | muted mint  | cool, dawn, calm         |
-| `#6ab5f5` | muted sky   | night, distance, quiet   |
+| hex       | family | reads as                 |
+| --------- | ------ | ------------------------ |
+| `#e8a04a` | amber  | burn, heat, ember        |
+| `#e56b5a` | coral  | conflict, alarm, warning |
+| `#d3e85a` | lime   | return, growth, life     |
+| `#7fe4c5` | mint   | cool, dawn, calm         |
+| `#6ab5f5` | sky    | night, distance, quiet   |
 
-Cortex may drift slightly off these anchors — the constraint is the family, not the exact swatch. No greys, no browns, no fluorescents, no deep saturated primaries. `none`-storyline cards use grey (`#6b7280`) deliberately; that colour is reserved for "no story to tell".
+`none`-storyline cards use grey (`#6b7280`), which is not in the palette and is reserved for "no story to tell". They never reach Cortex.
 
 Narration constraints: use only the supplied facts and invent nothing — then say what they mean (see Voice rules).
 

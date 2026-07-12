@@ -1,4 +1,4 @@
-import type { CSSProperties, JSX } from 'react';
+import type { JSX } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InvalidSlugError, parseSlug, type RepoSlug } from '../shared/slug.js';
 import { useJob } from './useJob.js';
@@ -7,9 +7,6 @@ import { Loading } from './screens/Loading.js';
 import { Result } from './screens/Result.js';
 import { Failed } from './screens/Failed.js';
 import { Nav } from './screens/Nav.js';
-
-/** The shell's colour until a card exists. Cortex owns every accent after that. */
-const BRAND_ACCENT = '#ffb61e';
 
 function slugFromPath(pathname: string): RepoSlug | null {
   try {
@@ -41,8 +38,6 @@ export function App(): JSX.Element {
     setSlug(next);
   }, []);
 
-  const accent = state?.status === 'ready' && state.accent ? state.accent : BRAND_ACCENT;
-
   const screen = useMemo(() => {
     if (!slug) return <Landing onSubmit={navigate} />;
     if (error) return <Failed slug={slug} reason={error} onSubmit={navigate} />;
@@ -61,8 +56,12 @@ export function App(): JSX.Element {
     return <Loading slug={slug} />;
   }, [slug, state, error, navigate]);
 
+  // The shell keeps the brand colour. Cortex's accent is a reading of one repo's history,
+  // so it belongs on that repo's card and nowhere else — the card is an SVG that already
+  // carries it, and repainting the whole site around it would make the product look like
+  // it changes identity per visitor.
   return (
-    <div style={{ '--accent': accent } as CSSProperties}>
+    <div>
       <Nav
         onHome={() => {
           navigate(null);

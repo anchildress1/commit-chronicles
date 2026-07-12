@@ -1,8 +1,7 @@
 :root {
-  /* Until a card exists there is no Snowflake response, so the shell wears the product
-     mark's colour. The moment a card is ready, --accent is overwritten with the hex
-     Cortex chose for that repo, and every accented element on the page follows it. */
-  --accent: #ffb61e;
+  /* The product's colour, and a constant. Cortex's accent is a reading of one repo's
+     arc — it paints that repo's card and nothing else. */
+  --accent: #2ec4ff;
 
   --ink: #eef1f7;
   --muted: #9aa1b3;

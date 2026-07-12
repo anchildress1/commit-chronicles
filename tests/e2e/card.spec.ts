@@ -72,9 +72,7 @@ test('submitting a repo routes to it and shows the reading state', async ({ page
   );
 });
 
-test('a ready repo shows the card and the README embed, in the accent Cortex chose', async ({
-  page,
-}) => {
+test('a ready repo shows the card and the README embed', async ({ page }) => {
   await stubApi(page, {
     'atlas/pipeline': {
       status: 'ready',
@@ -90,12 +88,30 @@ test('a ready repo shows the card and the README embed, in the accent Cortex cho
   await expect(page.getByText('[![Commit Chronicle]', { exact: false })).toContainText(
     '/atlas/pipeline/card.svg',
   );
+});
 
-  // The page wears the card's colour, not a brand constant.
+test('the shell keeps the brand colour, whatever accent Cortex chose', async ({ page }) => {
+  // Cortex's accent is a reading of one repo's arc. It belongs on that repo's card — the
+  // SVG carries it — and repainting the whole site around it would make the product look
+  // like it changes identity per visitor.
+  await stubApi(page, {
+    'atlas/pipeline': {
+      status: 'ready',
+      repo: 'atlas/pipeline',
+      accent: '#d3e85a',
+      generatedAt: '2026-07-11',
+    },
+  });
+
+  await page.goto('/atlas/pipeline');
+  await expect(page.getByRole('img', { name: /Commit Chronicles card/ })).toBeVisible();
+
   const accent = await page
     .locator('main')
     .evaluate((node) => getComputedStyle(node).getPropertyValue('--accent').trim());
-  expect(accent).toBe('#d3e85a');
+
+  expect(accent).toBe('#2ec4ff');
+  expect(accent).not.toBe('#d3e85a');
 });
 
 test('a failed repo says why, and offers the field again', async ({ page }) => {

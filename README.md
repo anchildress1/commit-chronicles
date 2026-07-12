@@ -260,7 +260,9 @@ QUALIFY ROW_NUMBER() OVER (
 
 `CHRONICLE_CARD` is a hand-written SQL UDF wrapping `AI_COMPLETE` — one schema-constrained call. Model `claude-sonnet-4-5`, `temperature 0.4`, `max_tokens 2048`.
 
-It is fed `CARD_EVIDENCE`: the winning thread's commit lines, budgeted at **25% of the history, floored at 20 lines and capped at 140**. Never the whole repo. Squash-merge bodies are exploded into individual lines first, so work hidden inside a merge is still visible.
+It is fed `CARD_EVIDENCE`: the winning thread's commit lines, budgeted at **25% of the history, floored at 20 and capped at 140** — plus the first 5 and last 8 regardless, because the opening and the ending are the shape of the story. Never the whole repo. Squash-merge bodies are exploded into individual lines first, so work hidden inside a merge is still visible.
+
+The selection is deterministic: lines are ranked by distance from the pivot and tie-broken on `SHA` and `PART`, so the same repo hands Cortex the same evidence in the same order every time.
 
 The response schema constrains exactly nine keys:
 

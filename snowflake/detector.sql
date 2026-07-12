@@ -490,7 +490,7 @@ WITH budget AS (
 picked AS (
     SELECT
         l.REPO_OWNER, l.REPO_NAME, l.LINE, l.AUTHORED_AT, l.UTC_HOUR,
-        l.IS_AI_ASSISTED, l.FROM_SQUASH
+        l.IS_AI_ASSISTED, l.FROM_SQUASH, l.SHA, l.PART
     FROM COMMIT_LINES l
     JOIN REPO_STORYLINE w USING (REPO_OWNER, REPO_NAME)
     JOIN budget       t USING (REPO_OWNER, REPO_NAME)
@@ -515,13 +515,17 @@ SELECT
     w.PIVOT_AT,
     w.FACTS,
     w.EVIDENCE,
+    -- Same tiebreak as `picked`, and for the same reason: every line exploded out of one
+    -- squash body carries that merge's AUTHORED_AT, so PART 0..n are tied by construction.
+    -- Ordering on the timestamp alone lets the array — and therefore the prompt, and
+    -- therefore the card — come back different between two reads of the same repo.
     ARRAY_AGG(OBJECT_CONSTRUCT(
         'subject',    p.LINE,
         'authoredAt', TO_VARCHAR(p.AUTHORED_AT),
         'utcHour',    p.UTC_HOUR,
         'aiAssisted', p.IS_AI_ASSISTED,
         'fromSquash', p.FROM_SQUASH
-    )) WITHIN GROUP (ORDER BY p.AUTHORED_AT) AS COMMITS
+    )) WITHIN GROUP (ORDER BY p.AUTHORED_AT, p.SHA, p.PART) AS COMMITS
 FROM REPO_STORYLINE w
 JOIN picked p USING (REPO_OWNER, REPO_NAME)
 GROUP BY w.REPO_OWNER, w.REPO_NAME, w.STORYLINE, w.SCORE, w.PIVOT_AT, w.FACTS, w.EVIDENCE;

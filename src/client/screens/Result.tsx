@@ -1,19 +1,23 @@
 import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { RepoSlug } from '../../shared/slug.js';
-import { cardUrl, embedMarkdown } from '../api.js';
+import { embedMarkdown } from '../api.js';
 
 interface ResultProps {
   slug: RepoSlug;
+  /** The card's public bucket URL, from the ready state. */
+  cardUrl: string;
   onHome: () => void;
 }
 
-function useCopy(): [boolean, (value: string) => void] {
-  const [copied, setCopied] = useState(false);
+type CopyState = 'idle' | 'copied' | 'refused';
+
+function useCopy(): [CopyState, (value: string) => void] {
+  const [state, setState] = useState<CopyState>('idle');
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // The "copied" flag resets on a timer. Leaving on a click strands it, and it fires into
-  // a component that no longer exists.
+  // The flag resets on a timer. Leaving on a click strands it, and it fires into a component
+  // that no longer exists.
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
@@ -22,26 +26,42 @@ function useCopy(): [boolean, (value: string) => void] {
   );
 
   const copy = (value: string): void => {
-    // A denied clipboard permission must not take the page down with it.
-    void navigator.clipboard.writeText(value).catch(() => undefined);
-    setCopied(true);
+    // Claimed only once the write resolves. A browser that refuses the clipboard must not be
+    // answered with a tick, or the reader pastes the last thing they copied somewhere else.
+    void navigator.clipboard.writeText(value).then(
+      () => {
+        settle('copied');
+      },
+      () => {
+        settle('refused');
+      },
+    );
+  };
 
+  const settle = (next: CopyState): void => {
+    setState(next);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      setCopied(false);
+      setState('idle');
     }, 1600);
   };
 
-  return [copied, copy];
+  return [state, copy];
 }
 
-/** The card is the product, so it gets the page. Everything else is chrome. */
-export function Result({ slug, onHome }: ResultProps): JSX.Element {
-  const origin = window.location.origin;
-  const [imageCopied, copyImage] = useCopy();
-  const [embedCopied, copyEmbed] = useCopy();
+const LABEL: Record<CopyState, (idle: string) => string> = {
+  idle: (idle) => idle,
+  copied: () => '✓ copied',
+  refused: () => 'clipboard refused — select it',
+};
 
-  const embed = embedMarkdown(slug, origin);
+/** The card is the product, so it gets the page. Everything else is chrome. */
+export function Result({ slug, cardUrl, onHome }: ResultProps): JSX.Element {
+  const origin = window.location.origin;
+  const [imageCopy, copyImage] = useCopy();
+  const [embedCopy, copyEmbed] = useCopy();
+
+  const embed = embedMarkdown(slug, origin, cardUrl);
 
   return (
     <main className="stage stage--result">
@@ -52,8 +72,8 @@ export function Result({ slug, onHome }: ResultProps): JSX.Element {
       </p>
 
       <div className="card-frame">
-        {/* The card the bucket serves, not a second rendering: byte-for-byte the README's. */}
-        <img src={cardUrl(slug)} alt={`Commit Chronicles card for ${slug.slug}`} />
+        {/* Straight from the bucket — byte-for-byte the image a README will show. */}
+        <img src={cardUrl} alt={`Commit Chronicles card for ${slug.slug}`} />
       </div>
 
       <div className="takeaway">
@@ -62,10 +82,10 @@ export function Result({ slug, onHome }: ResultProps): JSX.Element {
             type="button"
             className="btn-primary btn-block"
             onClick={() => {
-              copyImage(`${origin}${cardUrl(slug)}`);
+              copyImage(cardUrl);
             }}
           >
-            {imageCopied ? '✓ copied' : 'Copy card image'}
+            {LABEL[imageCopy]('Copy image URL')}
           </button>
           <button
             type="button"
@@ -74,7 +94,7 @@ export function Result({ slug, onHome }: ResultProps): JSX.Element {
               copyEmbed(embed);
             }}
           >
-            {embedCopied ? '✓ copied markdown' : 'Copy README embed'}
+            {LABEL[embedCopy]('Copy README embed')}
           </button>
         </div>
 

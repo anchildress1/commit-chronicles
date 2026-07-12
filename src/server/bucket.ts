@@ -6,9 +6,12 @@ import type { CardPayload } from './card/types.js';
 // truth to drift. Cloud Run is the only writer.
 
 export type JobState =
-  /** The accent rides in the object's metadata, so the page can wear the card's colour
-   *  without downloading the payload on every poll. */
-  | { status: 'ready'; repo: string; accent: string }
+  /**
+   * The accent rides in the object's metadata, so the page can wear the card's colour without
+   * downloading the payload on every poll. `cardUrl` points at the public bucket, which is
+   * what every reader — the page, a README, camo — fetches the image from.
+   */
+  | { status: 'ready'; repo: string; accent: string; cardUrl: string }
   | { status: 'generating'; repo: string; startedAt: string }
   | { status: 'failed'; repo: string; errorCode: string; failedAt: string; reasons?: string[] }
   | { status: 'unknown'; repo: string };
@@ -16,8 +19,6 @@ export type JobState =
 export interface CardStore {
   /** The repo's state, decided by which objects exist. Never throws for a repo not found. */
   readState(owner: string, repo: string): Promise<JobState>;
-  /** The rendered card, or null when there is none. */
-  readCardSvg(owner: string, repo: string): Promise<string | null>;
   /**
    * Claim the repo for generation.
    *
@@ -40,6 +41,16 @@ export interface CardStore {
 }
 
 const prefix = (owner: string, repo: string): string => `cards/${owner}/${repo}`;
+
+/**
+ * Where the world fetches the card from.
+ *
+ * The bucket is public, so a reader gets the SVG straight from it. Serving the image through
+ * Cloud Run instead would put a billed request in front of every README view of every card,
+ * to hand back bytes the bucket was already willing to hand back for free.
+ */
+const publicCardUrl = (bucketName: string, owner: string, repo: string): string =>
+  `https://storage.googleapis.com/${bucketName}/${prefix(owner, repo)}/card.svg`;
 
 interface QuotaFile {
   count: number;
@@ -80,6 +91,7 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
           status: 'ready',
           repo: `${owner}/${repo}`,
           accent: safeAccent(String(metadata.metadata?.['accent'] ?? '')),
+          cardUrl: publicCardUrl(bucketName, owner, repo),
         };
       } catch (error) {
         if (!isNotFound(error)) throw error;
@@ -89,16 +101,6 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
       return (
         (state?.value as JobState | undefined) ?? { status: 'unknown', repo: `${owner}/${repo}` }
       );
-    },
-
-    async readCardSvg(owner, repo) {
-      try {
-        const [contents] = await bucket.file(`${prefix(owner, repo)}/card.svg`).download();
-        return contents.toString('utf8');
-      } catch (error) {
-        if (isNotFound(error)) return null;
-        throw error;
-      }
     },
 
     async claimGenerating(owner, repo) {

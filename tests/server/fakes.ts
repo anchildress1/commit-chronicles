@@ -31,14 +31,13 @@ export function fakeStore(): FakeStore {
           status: 'ready',
           repo: key(owner, repo),
           accent: card.payload.accent,
+          cardUrl: `https://storage.googleapis.com/test-bucket/cards/${owner}/${repo}/card.svg`,
         });
       }
       return Promise.resolve(
         states.get(key(owner, repo)) ?? { status: 'unknown', repo: key(owner, repo) },
       );
     },
-
-    readCardSvg: (owner, repo) => Promise.resolve(cards.get(key(owner, repo))?.svg ?? null),
 
     claimGenerating: (owner, repo) => {
       // Create-only, exactly like the bucket: a claim that already exists cannot be taken.

@@ -7,6 +7,8 @@ export interface JobState {
   repo: string;
   /** The colour Cortex chose for this repo's card. Present once the card exists. */
   accent?: string;
+  /** The card's public bucket URL. Present once the card exists. */
+  cardUrl?: string;
   startedAt?: string;
   errorCode?: string;
   reasons?: string[];
@@ -50,12 +52,15 @@ export async function fetchState(slug: RepoSlug): Promise<JobState> {
   return (await response.json()) as JobState;
 }
 
-export function cardUrl(slug: RepoSlug): string {
-  return `/${slug.owner}/${slug.repo}/card.svg`;
-}
-
-/** The README embed: an image of the card, linking back to the repo's page. */
-export function embedMarkdown(slug: RepoSlug, origin: string): string {
+/**
+ * The README embed: the card image, linking back to the repo's page.
+ *
+ * The image comes straight from the public bucket, so a README view costs nothing to serve.
+ * Only the link lands on the site.
+ *
+ * @param cardUrl The bucket URL from the ready state — the client cannot derive it.
+ */
+export function embedMarkdown(slug: RepoSlug, origin: string, cardUrl: string): string {
   const page = `${origin}/${slug.slug}`;
-  return `[![Commit Chronicle](${page}/card.svg)](${page})`;
+  return `[![Commit Chronicle](${cardUrl})](${page})`;
 }

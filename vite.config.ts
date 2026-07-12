@@ -59,11 +59,9 @@ export default defineConfig({
       // Anchored, because a bare '/api' prefix also matches the client's own `/api.ts`
       // module request and proxies it to the backend — where it 404s, and the SPA never
       // boots. Only real API routes go through.
+      // The card needs no rule: it is fetched straight from the public bucket, by its absolute
+      // URL, in dev exactly as in production.
       '^/api/': api(),
-
-      // The card is served by the API, not by Vite. Without this the SPA fallback answers
-      // with index.html and the preview renders as a broken image.
-      '^/[^/]+/[^/]+/card\\.svg$': api(),
     },
   },
 });

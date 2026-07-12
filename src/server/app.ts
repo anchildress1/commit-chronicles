@@ -102,23 +102,8 @@ export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): 
     return c.json(state, { headers: { 'cache-control': 'no-store' } });
   });
 
-  app.get('/:owner/:repo/card.svg', async (c) => {
-    let slug;
-    try {
-      slug = parseSlug(`${c.req.param('owner')}/${c.req.param('repo')}`);
-    } catch {
-      return c.notFound();
-    }
-
-    const svg = await store.readCardSvg(slug.owner, slug.repo);
-    if (!svg) return c.notFound();
-
-    return c.body(svg, 200, {
-      'content-type': 'image/svg+xml; charset=utf-8',
-      // Camo caches on these. Without them the README embed becomes a broken badge.
-      'cache-control': 'public, max-age=3600, s-maxage=86400',
-    });
-  });
+  // There is no card route. The bucket is public and serves the SVG itself, so a README view
+  // never touches Cloud Run — see `publicCardUrl`. The state response carries the URL.
 
   if (clientRoot) {
     app.use('/assets/*', serveStatic({ root: clientRoot }));

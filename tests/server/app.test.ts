@@ -253,40 +253,39 @@ describe('GET /api/state/:owner/:repo', () => {
   });
 });
 
-describe('GET /:owner/:repo/card.svg', () => {
-  it('serves the card from the bucket', async () => {
+describe('serving the card', () => {
+  it('does not serve the card at all — the public bucket does', async () => {
+    // Every README view fetches this image. Proxying it through Cloud Run would put a billed
+    // request in front of bytes the bucket already serves for free.
     const { app, queue } = harness();
     await generate(app, 'atlas/pipeline');
     await queue.deliver();
 
-    const response = await app.request('/atlas/pipeline/card.svg');
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toContain('image/svg+xml');
-    expect(await response.text()).toContain('<svg');
+    expect((await app.request('/atlas/pipeline/card.svg')).status).toBe(404);
   });
 
-  it('sets cache headers camo will honour', async () => {
+  it('hands the reader the bucket URL once the card exists', async () => {
     const { app, queue } = harness();
     await generate(app, 'atlas/pipeline');
     await queue.deliver();
 
-    const response = await app.request('/atlas/pipeline/card.svg');
+    const state = (await (await app.request('/api/state/atlas/pipeline')).json()) as {
+      cardUrl?: string;
+    };
 
-    expect(response.headers.get('cache-control')).toContain('max-age=3600');
+    expect(state.cardUrl).toMatch(
+      /^https:\/\/storage\.googleapis\.com\/.+\/cards\/atlas\/pipeline\/card\.svg$/,
+    );
   });
 
-  it('404s for a repo with no card, rather than generating one on a GET', async () => {
+  it('offers no card URL for a repo that has none', async () => {
     const { app, store } = harness();
 
-    const response = await app.request('/atlas/pipeline/card.svg');
+    const state = (await (await app.request('/api/state/atlas/pipeline')).json()) as {
+      cardUrl?: string;
+    };
 
-    expect(response.status).toBe(404);
+    expect(state.cardUrl).toBeUndefined();
     expect(store.quotaUsed).toBe(0);
-  });
-
-  it('404s a traversal attempt without touching the bucket', async () => {
-    const { app } = harness();
-    expect((await app.request('/-bad/repo/card.svg')).status).toBe(404);
   });
 });

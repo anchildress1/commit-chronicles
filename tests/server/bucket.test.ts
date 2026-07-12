@@ -90,6 +90,7 @@ describe('readState', () => {
       status: 'ready',
       repo: 'atlas/pipeline',
       accent: CARD.accent,
+      cardUrl: 'https://storage.googleapis.com/test-bucket/cards/atlas/pipeline/card.svg',
     });
   });
 
@@ -199,16 +200,17 @@ describe('writeCard', () => {
   });
 });
 
-describe('readCardSvg', () => {
-  it('returns the card', async () => {
+describe('the card URL', () => {
+  it('points readers at the public bucket, never at the service', async () => {
     const fake = fakeStorage();
     await store(fake).writeCard('atlas', 'pipeline', '<svg>card</svg>', CARD);
 
-    await expect(store(fake).readCardSvg('atlas', 'pipeline')).resolves.toBe('<svg>card</svg>');
-  });
+    const state = await store(fake).readState('atlas', 'pipeline');
 
-  it('returns null when there is no card', async () => {
-    await expect(store(fakeStorage()).readCardSvg('atlas', 'pipeline')).resolves.toBeNull();
+    expect(state).toMatchObject({
+      status: 'ready',
+      cardUrl: 'https://storage.googleapis.com/test-bucket/cards/atlas/pipeline/card.svg',
+    });
   });
 });
 

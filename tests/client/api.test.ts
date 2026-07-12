@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   QuotaExceededError,
-  cardUrl,
   embedMarkdown,
   fetchState,
   requestGeneration,
@@ -62,16 +61,20 @@ describe('fetchState', () => {
   });
 });
 
-describe('cardUrl', () => {
-  it('points at the served card', () => {
-    expect(cardUrl(SLUG)).toBe('/atlas/pipeline/card.svg');
-  });
-});
-
 describe('embedMarkdown', () => {
-  it('produces a README embed that links back to the page', () => {
-    expect(embedMarkdown(SLUG, 'https://commitchronicles.dev')).toBe(
-      '[![Commit Chronicle](https://commitchronicles.dev/atlas/pipeline/card.svg)](https://commitchronicles.dev/atlas/pipeline)',
+  const CARD = 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg';
+
+  it('points the image at the bucket and the link at the page', () => {
+    expect(embedMarkdown(SLUG, 'https://commitchronicles.dev', CARD)).toBe(
+      `[![Commit Chronicle](${CARD})](https://commitchronicles.dev/atlas/pipeline)`,
     );
+  });
+
+  it('keeps the site out of the image path, so a README view is never billed', () => {
+    const embed = embedMarkdown(SLUG, 'https://commitchronicles.dev', CARD);
+    const image = /!\[Commit Chronicle\]\(([^)]+)\)/.exec(embed)?.[1];
+
+    expect(image).toBe(CARD);
+    expect(image).not.toContain('commitchronicles.dev');
   });
 });

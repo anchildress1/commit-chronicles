@@ -20,10 +20,10 @@ describe('dev server proxy', () => {
     expect(matches('/api/state/atlas/pipeline')).toBe(true);
   });
 
-  it('sends the card to the backend, which is the only thing that can render it', () => {
-    // Unproxied, the SPA fallback answers with index.html and the preview is a broken image.
-    expect(matches('/atlas/pipeline/card.svg')).toBe(true);
-    expect(matches('/anchildress1/rai-lint/card.svg')).toBe(true);
+  it('does not proxy the card, because the bucket serves it directly', () => {
+    // The card is fetched by its absolute bucket URL, so nothing about it is ever same-origin.
+    // A rule here would only be dead weight — and a hint that Cloud Run is back in the path.
+    expect(matches('/atlas/pipeline/card.svg')).toBe(false);
   });
 
   it('does not swallow the client’s own /api.ts module', () => {

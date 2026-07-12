@@ -209,6 +209,17 @@ body {
   border-color: var(--accent);
 }
 
+/* Fills the field, so a click anywhere but the button lands on the label and focuses the
+   input — natively, with no handler and nothing for a keyboard user to miss. */
+.entry__lead {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  cursor: text;
+}
+
 .entry__prefix {
   display: flex;
   align-items: center;

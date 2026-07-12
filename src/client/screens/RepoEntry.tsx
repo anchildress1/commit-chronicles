@@ -1,4 +1,4 @@
-import { useRef, useState, type JSX, type MouseEvent, type SyntheticEvent } from 'react';
+import { useState, type JSX, type SyntheticEvent } from 'react';
 import { InvalidSlugError, parseSlug, type RepoSlug } from '../../shared/slug.js';
 
 interface RepoEntryProps {
@@ -18,16 +18,6 @@ export function RepoEntry({
 }: Readonly<RepoEntryProps>): JSX.Element {
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // The field reads as one control, so every part of it has to behave like one — the
-  // `github.com/` prefix and the padding around it included. A <label> would do this for
-  // free, but a label may not contain a second labelable element, and the submit button is
-  // one. Clicks that land on the button are left alone.
-  const focusInput = (event: MouseEvent<HTMLDivElement>): void => {
-    if ((event.target as HTMLElement).closest('button')) return;
-    inputRef.current?.focus();
-  };
 
   const submit = (event: SyntheticEvent): void => {
     event.preventDefault();
@@ -44,25 +34,30 @@ export function RepoEntry({
 
   return (
     <form onSubmit={submit} noValidate>
-      <div className="entry__field" onClick={focusInput}>
-        <span className="entry__prefix" aria-hidden="true">
-          github.com/
-        </span>
-        <input
-          ref={inputRef}
-          className="entry__input"
-          value={value}
-          onChange={(event) => {
-            setValue(event.target.value);
-            setError(null);
-          }}
-          placeholder="owner/repo"
-          aria-label="GitHub repository, as owner/repo"
-          aria-invalid={error !== null}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-        />
+      <div className="entry__field">
+        {/* The field reads as one control, so the `github.com/` prefix and the space around it
+            have to behave like one. A label does that natively — no click handler, no keyboard
+            special case. It wraps only the input, because a label may not contain a second
+            labelable element and the submit button is one. */}
+        <label className="entry__lead">
+          <span className="entry__prefix" aria-hidden="true">
+            github.com/
+          </span>
+          <input
+            className="entry__input"
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setError(null);
+            }}
+            placeholder="owner/repo"
+            aria-label="GitHub repository, as owner/repo"
+            aria-invalid={error !== null}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+        </label>
         <button type="submit" className="btn-primary" disabled={value.trim().length === 0}>
           {submitLabel}
         </button>

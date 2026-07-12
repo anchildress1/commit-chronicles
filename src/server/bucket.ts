@@ -1,12 +1,8 @@
 import { Storage } from '@google-cloud/storage';
 import type { CardPayload } from './card/types.js';
 
-/**
- * The bucket is the cache of record. The card object's existence *is* the ready state —
- * there is no database, and no second source of truth to drift away from it.
- *
- * Cloud Run is the only writer. Clients read the public objects directly.
- */
+// The cache of record. The card's existence *is* the ready state — no second source of
+// truth to drift. Cloud Run is the only writer.
 
 export type JobState =
   | { status: 'ready'; repo: string }
@@ -52,9 +48,7 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
     async readState(owner, repo) {
       const base = prefix(owner, repo);
 
-      // Ready is checked first, and checked by existence — a card in the bucket is a card,
-      // whatever a stale marker next to it might claim. Nothing reads the payload here, so
-      // this asks whether the object is there rather than downloading it to find out.
+      // Checked by existence, and checked first: a card outranks any stale marker beside it.
       const [ready] = await bucket.file(`${base}/card.json`).exists();
       if (ready) {
         return { status: 'ready', repo: `${owner}/${repo}` };
@@ -89,7 +83,6 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
     },
 
     async markFailed(owner, repo, errorCode, reasons) {
-      // A failed repo is cached exactly so a bad slug cannot be retried into a bill.
       const state: JobState = {
         status: 'failed',
         repo: `${owner}/${repo}`,
@@ -106,9 +99,8 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
     async writeCard(owner, repo, svg, payload) {
       const base = prefix(owner, repo);
 
-      // The SVG lands before the payload, and the payload is what `readState` reads as
-      // ready — so a crash between the two writes leaves a repo retryable, never a page
-      // claiming ready with no card behind it.
+      // SVG first: `readState` reads the payload as ready, so a crash between the two
+      // leaves the repo retryable rather than ready-with-no-card.
       await bucket.file(`${base}/card.svg`).save(svg, {
         contentType: 'image/svg+xml',
         metadata: { cacheControl: 'public, max-age=3600' },
@@ -131,8 +123,7 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
       const path = `meta/quota/${today}.json`;
       const file = bucket.file(path);
 
-      // Read-modify-write guarded by the object generation: two instances racing on the
-      // same counter cannot both win, so the cap holds across a scaled-out service.
+      // Generation-guarded read-modify-write: two instances racing cannot both win.
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const current = await readJson(path);
         const count = (current?.value as QuotaFile | undefined)?.count ?? 0;
@@ -150,8 +141,7 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
         }
       }
 
-      // Five straight losses means the service is saturated, which is what the cap exists
-      // to stop. Refusing is the correct answer, not retrying harder.
+      // Five straight losses means saturation, which is what the cap exists to stop.
       return false;
     },
   };

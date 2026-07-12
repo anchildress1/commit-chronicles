@@ -21,8 +21,7 @@ export function App(): JSX.Element {
   const [slug, setSlug] = useState<RepoSlug | null>(() => slugFromPath(window.location.pathname));
   const { state, error, retry } = useJob(slug);
 
-  // The URL is the address of a story, so back and forward have to work: the route is
-  // the state, not a step in a wizard.
+  // The route is the state, not a wizard step: back and forward have to work.
   useEffect(() => {
     const onPop = (): void => {
       setSlug(slugFromPath(window.location.pathname));
@@ -56,10 +55,7 @@ export function App(): JSX.Element {
     return <Loading slug={slug} />;
   }, [slug, state, error, navigate, retry]);
 
-  // The shell keeps the brand colour. Cortex's accent is a reading of one repo's history,
-  // so it belongs on that repo's card and nowhere else — the card is an SVG that already
-  // carries it, and repainting the whole site around it would make the product look like
-  // it changes identity per visitor.
+  // Cortex's accent belongs on the repo's card, which carries it. The shell stays brand.
   return (
     <div>
       <Nav

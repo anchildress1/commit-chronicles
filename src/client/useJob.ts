@@ -31,13 +31,7 @@ function describe(cause: unknown): string {
 
 const settled = (state: JobState): boolean => state.status === 'ready' || state.status === 'failed';
 
-/**
- * Attach to the job for `slug`.
- *
- * Read the state first and only ask for a generation when the bucket has nothing — a repo
- * someone else already read costs nothing to show, and returning to the page must never
- * re-run Cortex.
- */
+/** Attach to the job for `slug`. Reads state first: returning to a page never re-runs Cortex. */
 export function useJob(slug: RepoSlug | null): Job {
   const [tracked, setTracked] = useState<Tracked>(EMPTY);
   /** Bumped by retry(). Re-runs the effect for a slug the hook is already attached to. */
@@ -45,8 +39,8 @@ export function useJob(slug: RepoSlug | null): Job {
   const forced = useRef(false);
 
   const retry = useCallback(() => {
-    // A cached failure is settled, so the normal attach would just show it again. This says
-    // "ask anyway" — the server still decides whether the failure is one it will re-run.
+    // A cached failure is settled, so attach would just re-show it. This asks anyway; the
+    // server still decides whether it will re-run.
     forced.current = true;
     setAttempt((n) => n + 1);
   }, []);
@@ -54,8 +48,7 @@ export function useJob(slug: RepoSlug | null): Job {
   useEffect(() => {
     if (!slug) return;
 
-    // Read through a call, not a variable: a plain flag gets narrowed by the first check
-    // and every later guard then reads as dead code, even though cleanup does flip it.
+    // Read through a call: a plain flag narrows to dead code after the first check.
     const live = { current: true };
     const alive = (): boolean => live.current;
     const force = forced.current;
@@ -65,8 +58,7 @@ export function useJob(slug: RepoSlug | null): Job {
     const startedAt = Date.now();
 
     const publish = (next: Omit<Tracked, 'forSlug'>): void => {
-      // Late responses from a repo the user already navigated away from are dropped: the
-      // state carries the slug it describes, so it can never paint the wrong card.
+      // Tagged with its slug, so a late response can never paint the wrong repo's card.
       if (alive()) setTracked({ forSlug: slug.slug, ...next });
     };
 
@@ -107,8 +99,7 @@ export function useJob(slug: RepoSlug | null): Job {
 
         publish({ state: started, error: null });
 
-        // The server refuses a retry it considers terminal, and answers with the failure it
-        // already had. Polling that would spin forever on a state that will never move.
+        // A refused retry comes back already-failed. Polling it would spin forever.
         if (settled(started)) return;
 
         timer = setTimeout(() => void poll(), POLL_MS);
@@ -125,8 +116,7 @@ export function useJob(slug: RepoSlug | null): Job {
     };
   }, [slug, attempt]);
 
-  // Derived, not reset in an effect: a slug change blanks the view on the same render that
-  // requests the new one, with no flash of the previous repo's card.
+  // Derived, not reset in an effect: no flash of the previous repo's card on a slug change.
   const current = tracked.forSlug === (slug?.slug ?? null) ? tracked : EMPTY;
   return { state: current.state, error: current.error, retry };
 }

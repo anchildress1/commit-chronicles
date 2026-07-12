@@ -23,13 +23,7 @@ function useCopy(): [boolean, (value: string) => void] {
   return [copied, copy];
 }
 
-/**
- * The card is the product, so it gets the page.
- *
- * Everything else here is chrome: the address, a line of fine print, and the two buttons
- * that get the card out of this page and into a README. None of it competes for width —
- * the story has to be readable at a glance, not squinted at next to a column of controls.
- */
+/** The card is the product, so it gets the page. Everything else is chrome. */
 export function Result({ slug, onHome }: ResultProps): JSX.Element {
   const origin = window.location.origin;
   const [imageCopied, copyImage] = useCopy();
@@ -46,8 +40,7 @@ export function Result({ slug, onHome }: ResultProps): JSX.Element {
       </p>
 
       <div className="card-frame">
-        {/* The preview is the card the bucket serves, not a second rendering of it — what a
-            reader sees here is byte-for-byte what lands in the README. */}
+        {/* The card the bucket serves, not a second rendering: byte-for-byte the README's. */}
         <img src={cardUrl(slug)} alt={`Commit Chronicles card for ${slug.slug}`} />
       </div>
 

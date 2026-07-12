@@ -1,6 +1,8 @@
 import { caption, escapeXml, formatClock, formatDay, headerMeta, safeAccent } from './format.js';
 import {
   CARD,
+  PLOT_BOTTOM,
+  PLOT_MIN_HEIGHT,
   buildPlot,
   buildVoidPanel,
   findDot,
@@ -8,15 +10,11 @@ import {
   type Dot,
   type PlotBox,
 } from './layout.js';
-import { measure, wrapHeadline, type Run } from './text.js';
+import { LINE_HEIGHT, fitOneLine, measure, wrapHeadline, type Run } from './text.js';
 import type { CardPayload } from './types.js';
 
-/**
- * GitHub proxies README images through camo, which will not fetch a webfont. The card
- * therefore names families it hopes the viewer already has and falls back through a
- * generic. Substituting a real Didone requires a base64-embedded subset; that is a known
- * open item, not an accident.
- */
+// Camo will not fetch a webfont, so these resolve against the viewer's own fonts. A real
+// Didone needs a base64-embedded subset — open item, not an accident.
 const SERIF = "'Bodoni Moda',Didot,'Playfair Display',Georgia,serif";
 const MONO = "'Space Mono','SFMono-Regular',Menlo,Consolas,monospace";
 const SANS = "'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif";
@@ -29,6 +27,9 @@ const DIM = '#77756d';
 const HEADLINE_COLUMN = 620;
 const HEADLINE_FRAME = CARD.width - 120;
 const HEADLINE_TOP = 190;
+
+/** Room above the scatter. The type shrinks into it; nothing Cortex writes can fail to fit. */
+const HEADLINE_BUDGET = PLOT_BOTTOM - PLOT_MIN_HEIGHT - HEADLINE_TOP;
 
 interface TextOptions {
   x: number;
@@ -79,8 +80,9 @@ function renderHeadline(payload: CardPayload, accent: string): Headline {
   const { lines, fontSize } = wrapHeadline(runs, {
     maxWidth: HEADLINE_COLUMN,
     hardMax: HEADLINE_FRAME,
+    heightBudget: HEADLINE_BUDGET,
   });
-  const lineHeight = fontSize * 1.06;
+  const lineHeight = fontSize * LINE_HEIGHT;
 
   const svg = lines
     .map((line, index) => {
@@ -107,8 +109,7 @@ function renderDot(dot: Dot, accent: string): string {
     ].join('');
   }
 
-  // Daylight commits are hollow, night commits solid: the card should read as a descent
-  // into the dark before a single word of it is read.
+  // Hollow by day, solid by night: the descent has to read before the words do.
   return dot.night
     ? `<circle cx="${round(dot.x)}" cy="${round(dot.y)}" r="4.5" fill="${INK}" opacity="0.92"/>`
     : `<circle cx="${round(dot.x)}" cy="${round(dot.y)}" r="4" fill="none" stroke="${INK}" stroke-opacity="0.42" stroke-width="1.5"/>`;
@@ -130,17 +131,13 @@ function clampX(x: number, width: number, anchor: 'start' | 'end'): number {
   return Math.max(x, 60 + width);
 }
 
-/**
- * Render the card. Every string on it is either a constant, a value Snowflake computed, or
- * a phrase Cortex wrote — nothing is derived from the model's numbers.
- */
+/** Render the card. Constants, Snowflake's facts, and Cortex's words — nothing invented. */
 export function renderCard(payload: CardPayload): string {
   const accent = safeAccent(payload.accent);
   const facts = payload.facts;
 
   const headline = renderHeadline(payload, accent);
-  // The plot starts below wherever the headline actually ended, so a three-line headline
-  // shrinks the scatter instead of landing on top of it.
+  // Plot starts below where the headline actually ended, so it cannot be landed on.
   const box: PlotBox = plotBox(headline.bottom);
 
   const geometry = buildPlot(payload.plot, box);
@@ -184,12 +181,15 @@ export function renderCard(payload: CardPayload): string {
     }),
   );
 
-  // Kicker: the repo names itself, Cortex names the genre.
+  // One line, no wrap: sets smaller rather than running off the edge.
+  const kicker = `${payload.repo}  —  ${payload.kicker}`;
+  const kickerSize = fitOneLine(kicker, 'mono', CARD.width - 120, [13, 12, 11, 10, 9], 2.6);
+
   parts.push(
-    text(`${payload.repo}  —  ${payload.kicker}`, {
+    text(kicker, {
       x: 60,
       y: 150,
-      size: 13,
+      size: kickerSize,
       family: MONO,
       fill: accent,
       spacing: 2.6,
@@ -266,9 +266,7 @@ export function renderCard(payload: CardPayload): string {
 
   parts.push(...geometry.dots.map((dot) => renderDot(dot, accent)));
 
-  // Anchors. Only the ones this storyline actually uses get a poetic tail; the rest are
-  // plain observations. Labels sit clear of the dot they name — a caption drawn through
-  // the scatter obscures the very thing it is pointing at.
+  // Only the anchors this storyline uses get a poetic tail. Labels sit clear of their dot.
   if (firstDot) {
     const tail = payload.labelFirst.trim();
     const label = `${formatClock(facts.firstCommitAt)} · ${formatDay(facts.firstCommitAt)}${tail ? ` — ${tail}` : ''}`;
@@ -333,8 +331,7 @@ export function renderCard(payload: CardPayload): string {
       fill: INK,
       anchor: 'end',
     }),
-    // The attribution is right-anchored, so the bullet has to be placed from the text's
-    // measured width — a fixed offset lands on the first letter the moment the type does.
+    // Right-anchored, so the bullet is placed from measured width, not a fixed offset.
     `<circle cx="${round(CARD.width - 60 - attributionWidth() - 10)}" cy="591" r="3" fill="${accent}"/>`,
     text('Read by Snowflake Cortex', {
       x: CARD.width - 60,
@@ -370,7 +367,7 @@ export function renderCard(payload: CardPayload): string {
   ].join('');
 }
 
-/** The card is an image in someone's README; a screen reader still has to get the story. */
+/** The card is an image in a README; a screen reader still has to get the story. */
 export function cardAltText(payload: CardPayload): string {
   const headline = [payload.headlineUpright, payload.headlineAccent, payload.headlineTrail]
     .join(' ')

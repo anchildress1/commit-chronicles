@@ -2,11 +2,7 @@ import type { RepoStatus } from './types.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/**
- * Snowflake renders TIMESTAMP_TZ as `2026-02-25 03:53:12.000 -0800`, which `Date` will
- * not parse: the date and time are space-separated and the offset has no colon. Rebuild
- * it into ISO-8601 rather than hand the string to a lenient parser and hope.
- */
+/** `Date` cannot parse Snowflake's TIMESTAMP_TZ, so rebuild it into ISO-8601 rather than hope. */
 export function parseSnowflakeTimestamp(value: string): Date {
   const match =
     /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?\s*([+-]\d{2}):?(\d{2})?$/.exec(
@@ -25,11 +21,7 @@ export function parseSnowflakeTimestamp(value: string): Date {
   return new Date(`${date}T${time}${offsetHours}:${offsetMinutes}`);
 }
 
-/**
- * The card quotes times in the repo's own clock, so every reading is done against the
- * offset baked into the timestamp — never the server's local zone, which would move the
- * 3:53am ending depending on where the container happened to run.
- */
+/** Read against the timestamp's own offset: the server's zone would move the 3:53am ending. */
 function fieldsInOriginalZone(value: string): {
   hour: number;
   minute: number;
@@ -54,7 +46,7 @@ function fieldsInOriginalZone(value: string): {
   };
 }
 
-/** `3:53 AM` — the exact minute, because the whole point is that it was 3:53. */
+/** `3:53 AM`. The exact minute is the point. */
 export function formatClock(value: string): string {
   const { hour, minute } = fieldsInOriginalZone(value);
   const meridiem = hour < 12 ? 'AM' : 'PM';
@@ -80,7 +72,7 @@ export function headerMeta(commitCount: number, status: RepoStatus, lastCommitAt
   return `${commitCount} ${plural} · ${STATUS_VERB[status]} ${formatDay(lastCommitAt)}`;
 }
 
-/** The fixed disclosure plus the one fact it needs. The renderer owns this sentence. */
+/** The fixed disclosure. The renderer owns this sentence, not Cortex. */
 export function caption(lastCommitAt: string): string {
   return `Every dot is one commit, placed by the hour it landed. The last one was ${formatClock(
     lastCommitAt,
@@ -96,7 +88,7 @@ export function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-/** Cortex is schema-constrained to `#rrggbb`, but the card is public — verify anyway. */
+/** The card is public; verify the hex even though the schema constrains it. */
 export function safeAccent(accent: string, fallback = '#6b7280'): string {
   return /^#[0-9a-fA-F]{6}$/.test(accent) ? accent.toLowerCase() : fallback;
 }

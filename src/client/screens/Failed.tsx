@@ -11,10 +11,7 @@ interface FailedProps {
   reason?: string | undefined;
 }
 
-/**
- * Snowflake's error codes, said out loud. A repo that could not be read gets a straight
- * answer about why — not a spinner that quietly gives up.
- */
+/** Snowflake's error codes, said out loud. */
 const HEADLINE: Record<string, string> = {
   repo_not_found: 'Nothing to read here.',
   repo_private: 'That one is locked.',
@@ -37,7 +34,7 @@ const EXPLAIN: Record<string, string> = {
     'Every commit in that repository is a merge or a bot. There is no human history to read.',
   cortex_empty: 'Cortex returned nothing usable. This is on us — the next reading may land.',
   cortex_rejected:
-    'Cortex wrote a card that would not fit the frame, so we threw it away rather than print a broken one. It writes a fresh one every time, so reading again usually works.',
+    'Cortex returned a card that would have printed something untrue, so we threw it away. It writes a fresh one every time — reading again usually works.',
   pipeline_error: 'The generation pipeline fell over. This is on us — reading again may work.',
 };
 
@@ -49,8 +46,7 @@ export function Failed({ slug, onSubmit, onRetry, errorCode, reason }: FailedPro
   const headline = (errorCode && HEADLINE[errorCode]) ?? FALLBACK_HEADLINE;
   const explain = reason ?? (errorCode && EXPLAIN[errorCode]) ?? FALLBACK_EXPLAIN;
 
-  // Only offer a retry the server will actually honour. A button that re-shows the same
-  // cached failure is worse than no button.
+  // Only offer a retry the server will honour: a button that re-shows a cached failure lies.
   const canRetry = isRetryable(errorCode);
 
   return (

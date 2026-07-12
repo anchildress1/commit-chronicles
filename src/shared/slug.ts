@@ -1,8 +1,5 @@
-/**
- * Repo slugs arrive from the URL bar and from POST bodies, and they are concatenated
- * into bucket object keys. Anything that could climb out of the `cards/` prefix, or
- * that GitHub could not have minted in the first place, is rejected here.
- */
+// Slugs reach bucket object keys. Anything that could climb out of `cards/`, or that GitHub
+// could not have minted, is refused here.
 
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
 const REPO = /^[A-Za-z0-9_.-]{1,100}$/;
@@ -22,10 +19,10 @@ export class InvalidSlugError extends Error {
 }
 
 /**
- * Normalize user input into an `owner/repo` slug.
+ * Normalize input into an `owner/repo` slug.
  *
- * Accepts a bare slug, a github.com URL, an `.git` suffix, and stray whitespace or
- * trailing slashes. Throws {@link InvalidSlugError} on anything else.
+ * Accepts a bare slug, a github.com URL, a `.git` suffix, and stray whitespace.
+ * @throws {InvalidSlugError} on anything else.
  */
 export function parseSlug(input: string): RepoSlug {
   const cleaned = input

@@ -36,11 +36,7 @@ export interface GeneratorDeps extends PipelineDeps {
   now?: () => Date;
 }
 
-/**
- * The pipeline. Stands alone rather than hanging off the generator, because the queue has
- * to be able to run it and the generator has to be able to hold the queue — one of those
- * two has to not depend on the other.
- */
+/** The pipeline. Standalone: the queue runs it, and the generator holds the queue. */
 export async function runGeneration(
   { store, snowflake, log = () => undefined }: PipelineDeps,
   slug: RepoSlug,
@@ -90,8 +86,7 @@ export function createGenerator(deps: GeneratorDeps): Generator {
 
       if (state.status === 'generating') {
         const age = now().getTime() - new Date(state.startedAt).getTime();
-        // A marker older than the TTL belongs to a run that died. Anything younger is a
-        // live job, and a second Cortex call for it would be paid for twice.
+        // Older than the TTL means the run died. Younger means live — and paying twice.
         if (age < config.generatingTtlMs) {
           return { accepted: false, reason: 'already_generating', state };
         }
@@ -106,9 +101,8 @@ export function createGenerator(deps: GeneratorDeps): Generator {
         };
       }
 
-      // The marker lands before the task does. If enqueueing then fails, the repo is
-      // stuck on `generating` only until the TTL lapses — whereas the reverse order could
-      // run a job that nothing had claimed.
+      // Marker before task: a failed enqueue strands the repo only until the TTL lapses,
+      // where the reverse order would run a job nothing had claimed.
       await store.markGenerating(slug.owner, slug.repo);
       await queue.enqueue(slug);
 

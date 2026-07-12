@@ -11,11 +11,8 @@ export interface PlotBox {
   height: number;
 }
 
-/**
- * The scatter's box. `y` is not a constant: the headline is set in three slots of
- * model-written text and can run to three lines, so the plot starts below wherever the
- * headline actually ended. A fixed top would let a long headline land on top of the arc.
- */
+// `y` is not a constant: the headline is model-written and its height varies, so the plot
+// starts below wherever it actually ended.
 export const PLOT_X = 140;
 export const PLOT_WIDTH = 1000;
 export const PLOT_BOTTOM = 508;
@@ -27,10 +24,7 @@ export function plotBox(headlineBottom: number): PlotBox {
   return { x: PLOT_X, y: top, width: PLOT_WIDTH, height: PLOT_BOTTOM - top };
 }
 
-/**
- * The clock is rotated so 6am sits at the top and the small hours fall to the floor —
- * the shape of a repo that got later and later has to read as a descent, not a scatter.
- */
+/** Rotated so 6am is the ceiling and the small hours are the floor: later must read as down. */
 export function hourToY(hourFraction: number, box: PlotBox): number {
   const rotated = (((hourFraction - 6) % 24) + 24) % 24;
   return box.y + (0.06 + (rotated / 24) * 0.88) * box.height;
@@ -61,10 +55,7 @@ export interface PlotGeometry {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/**
- * Place every commit. `h` is Snowflake's UTC hour and `m` its minute — the card annotates
- * exact times, which an integer hour cannot produce.
- */
+/** Place every commit. `m` matters: the card annotates exact times, not whole hours. */
 export function buildPlot(plot: PlotPoint[], box: PlotBox): PlotGeometry {
   const points = plot
     .map((p) => ({ ...p, ms: parseSnowflakeTimestamp(p.t).getTime() }))
@@ -95,10 +86,7 @@ export function buildPlot(plot: PlotPoint[], box: PlotBox): PlotGeometry {
   };
 }
 
-/**
- * One tick per month boundary the span crosses, thinned so a five-year history does not
- * fill the axis with unreadable stubs.
- */
+/** One tick per month crossed, thinned so a long history does not fill the axis with stubs. */
 function monthTicks(startMs: number, endMs: number, box: PlotBox): { x: number; label: string }[] {
   const start = new Date(startMs);
   const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));

@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { measure, wrapHeadline, type LaidOutLine, type Run } from '../../src/server/card/text.js';
+import {
+  LINE_HEIGHT,
+  fitOneLine,
+  measure,
+  wrapHeadline,
+  type LaidOutLine,
+  type Run,
+} from '../../src/server/card/text.js';
 
-/** The card's real column and frame. */
-const COLUMN = { maxWidth: 660, hardMax: 1080 };
+/** The card's real column, frame, and vertical room. */
+const COLUMN = { maxWidth: 620, hardMax: 1080, heightBudget: 168 };
 
 const lineText = (line: LaidOutLine): string => line.runs.map((run) => run.text).join('');
 const flatten = (lines: LaidOutLine[]): string => lines.map(lineText).join(' ');
@@ -100,18 +107,20 @@ describe('wrapHeadline', () => {
     }
   });
 
-  it('shrinks the type when a headline at the top size would not fit in three lines', () => {
+  it('shrinks the type when a headline would overrun its vertical room', () => {
     const long: Run[] = [
       {
         text: 'Every word of this headline is here to force a wrap and then another',
         italic: false,
       },
-      { text: 'and one more clause to push it over the three-line budget entirely', italic: true },
+      { text: 'and one more clause to push it well past the room it has entirely', italic: true },
     ];
     const wrapped = wrapHeadline(long, COLUMN);
 
     expect(wrapped.fontSize).toBeLessThan(52);
-    expect(wrapped.lines.length).toBeLessThanOrEqual(3);
+    expect(wrapped.lines.length * wrapped.fontSize * LINE_HEIGHT).toBeLessThanOrEqual(
+      COLUMN.heightBudget,
+    );
   });
 
   it('shrinks an unbreakable token until it fits inside the frame', () => {
@@ -127,34 +136,60 @@ describe('wrapHeadline', () => {
     expect(widestLine(wrapped.lines, wrapped.fontSize)).toBeLessThanOrEqual(COLUMN.hardMax);
   });
 
-  it('wraps every legal headline without dropping a word', () => {
-    // The caps READ_REPO enforces: upright 60 + accent 60 + trail 5. If the renderer cannot
-    // hold what the guard lets through, a card prints half a sentence and looks deliberate.
-    const word = (n: number): string => {
-      const out: string[] = [];
-      while (out.join(' ').length < n) out.push('abcde');
-      return out.join(' ').slice(0, n).trim();
-    };
+  it.each([60, 120, 200, 400, 800])(
+    'holds a %i-character headline without dropping a word',
+    (length) => {
+      // Cortex cannot be held to a character count — the response schema takes no
+      // maxLength — so the frame has to absorb whatever it writes. It shrinks and runs to
+      // more lines; it never prints half a sentence.
+      const prose = (n: number): string => {
+        const out: string[] = [];
+        while (out.join(' ').length < n) out.push('abcde');
+        return out.join(' ').slice(0, n).trim();
+      };
 
+      const upright = prose(Math.floor(length / 2));
+      const accent = prose(Math.floor(length / 2));
+      const runs: Run[] = [
+        { text: upright, italic: false },
+        { text: accent, italic: true },
+        { text: '.', italic: false },
+      ];
+
+      const wrapped = wrapHeadline(runs, COLUMN);
+      const rendered = wrapped.lines.map(lineText).join(' ');
+
+      const expected = `${upright} ${accent}`.split(/\s+/).filter(Boolean);
+      const actual = rendered.replace(/\./g, '').split(/\s+/).filter(Boolean);
+
+      expect(actual).toEqual(expected);
+    },
+  );
+
+  it('spends its height budget rather than overflowing it', () => {
     const runs: Run[] = [
-      { text: word(60), italic: false },
-      { text: word(60), italic: true },
-      { text: '.', italic: false },
+      { text: 'a '.repeat(60), italic: false },
+      { text: 'b '.repeat(60), italic: true },
     ];
-
     const wrapped = wrapHeadline(runs, COLUMN);
-    const rendered = wrapped.lines.map(lineText).join(' ');
+    const height = wrapped.lines.length * wrapped.fontSize * LINE_HEIGHT;
 
-    const expected = `${word(60)} ${word(60)}`.split(/\s+/).filter(Boolean);
-    const actual = rendered.replace(/\./g, '').split(/\s+/).filter(Boolean);
-
-    expect(actual).toEqual(expected);
-    expect(wrapped.lines.length).toBeLessThanOrEqual(3);
+    expect(height).toBeLessThanOrEqual(COLUMN.heightBudget);
   });
 
-  it('never emits more lines than the cap, even at the smallest size', () => {
-    const absurd: Run[] = [{ text: 'word '.repeat(200), italic: false }];
-    expect(wrapHeadline(absurd, COLUMN).lines.length).toBe(3);
+  it('sets long prose smaller instead of refusing it', () => {
+    const short = wrapHeadline([{ text: 'It stopped.', italic: false }], COLUMN);
+    const long = wrapHeadline(
+      [
+        {
+          text: 'It stopped, and then it started again at an hour nobody should be awake, and then it stopped once more and never came back at all.',
+          italic: false,
+        },
+      ],
+      COLUMN,
+    );
+
+    expect(long.fontSize).toBeLessThan(short.fontSize);
   });
 
   it('puts a single short headline on one line', () => {
@@ -168,5 +203,23 @@ describe('wrapHeadline', () => {
   it('breaks onto a new line when a word will not fit the column', () => {
     const wrapped = wrapHeadline([{ text: `${'x'.repeat(30)} tail`, italic: false }], COLUMN);
     expect(wrapped.lines.length).toBeGreaterThan(1);
+  });
+});
+
+describe('fitOneLine', () => {
+  const SIZES = [13, 12, 11, 10, 9];
+
+  it('keeps the top size when the line already fits', () => {
+    expect(fitOneLine('atlas/pipeline — the collapse', 'mono', 1080, SIZES, 2.6)).toBe(13);
+  });
+
+  it('sets smaller rather than running off the edge', () => {
+    const long =
+      'a-very-long-organisation-name/an-even-longer-repository-name — a genre so verbose that it cannot possibly fit on one line at the top size';
+    expect(fitOneLine(long, 'mono', 1080, SIZES, 2.6)).toBeLessThan(13);
+  });
+
+  it('never returns nothing, however absurd the input', () => {
+    expect(fitOneLine('x'.repeat(500), 'mono', 1080, SIZES, 2.6)).toBe(9);
   });
 });

@@ -5,9 +5,8 @@ import type { ReadRepoResult } from './card/types.js';
 /**
  * The one call this service makes into the warehouse.
  *
- * `READ_REPO` ingests on a cold repo, runs the SQL detector, calls Cortex once, and hands
- * back the whole card payload. Cloud Run computes no analysis of its own, so there is
- * deliberately nothing else in this module.
+ * `READ_REPO` ingests on a cold repo, runs the detector, calls Cortex once, and returns the
+ * card payload. Cloud Run computes no analysis, so there is deliberately nothing else here.
  */
 export interface SnowflakeClient {
   readRepo(owner: string, repo: string): Promise<ReadRepoResult>;

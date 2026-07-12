@@ -1,12 +1,5 @@
-/**
- * Text metrics for SVG layout.
- *
- * The card is rendered as a string, not measured in a browser, so line breaking needs an
- * estimate of how wide a run will be. These factors are average glyph advance in `em`,
- * sampled from the three families the card actually uses. They are deliberately a little
- * generous: a headline that wraps one word early is fine, one that overruns the frame
- * is not.
- */
+// The card is a string, never measured in a browser, so wrapping needs an estimate.
+// Average glyph advance in `em`, biased high: wrapping a word early beats overrunning.
 const ADVANCE = {
   serif: 0.5,
   serifItalic: 0.46,
@@ -37,7 +30,7 @@ export interface WrappedHeadline {
 interface Word {
   text: string;
   italic: boolean;
-  /** False for the first word, and for punctuation that must stay welded to what it follows. */
+  /** False for the first word, and for punctuation welded to what it follows. */
   spaceBefore: boolean;
 }
 
@@ -116,12 +109,14 @@ function mergeRuns(words: Word[]): Run[] {
 export interface WrapOptions {
   /** The column the headline is composed into — narrow on purpose. */
   maxWidth: number;
-  /** The widest a line may ever be. A word longer than the column may exceed the column,
-   *  but a word that leaves the card is a rendering bug. */
+  /** Hard ceiling. A word may exceed the column; nothing may leave the card. */
   hardMax: number;
-  maxLines?: number;
+  /** Room above the scatter. */
+  heightBudget: number;
   sizes?: readonly number[];
 }
+
+export const LINE_HEIGHT = 1.06;
 
 function widest(lines: LaidOutLine[], fontSize: number): number {
   return lines.reduce((max, line) => {
@@ -134,31 +129,43 @@ function widest(lines: LaidOutLine[], fontSize: number): number {
 }
 
 /**
- * Wrap the three-slot headline, shrinking the type rather than letting it collide with the
- * scatter or run off the card.
+ * Fit the headline to a height budget: the largest size whose wrapped block fits.
  *
- * A single unbroken token can be wider than the column — a 55-character `headline_accent`
- * with no spaces is inside what Cortex is allowed to return — so line count alone is not
- * enough to prove the headline fits. The smallest size is chosen so the longest legal
- * token still lands inside the frame.
+ * Constrained decoding takes no `maxLength`, so Cortex cannot be held to a character count.
+ * The frame absorbs whatever it writes — longer prose sets smaller and runs to more lines.
+ * Never truncates: a half-printed sentence reads as the story the card meant to tell.
  */
 export function wrapHeadline(
   runs: Run[],
-  { maxWidth, hardMax, maxLines = 3, sizes = [52, 46, 40, 34, 28, 24, 20] }: WrapOptions,
+  { maxWidth, hardMax, heightBudget, sizes = [52, 46, 40, 34, 30, 26, 22, 18] }: WrapOptions,
 ): WrappedHeadline {
   const words = tokenize(runs);
 
+  const fits = (lines: LaidOutLine[], fontSize: number): boolean =>
+    lines.length * fontSize * LINE_HEIGHT <= heightBudget && widest(lines, fontSize) <= hardMax;
+
   for (const fontSize of sizes) {
     const lines = wrapAt(words, fontSize, maxWidth);
-    if (lines.length <= maxLines && widest(lines, fontSize) <= hardMax) {
+    if (fits(lines, fontSize)) {
       return { lines, fontSize };
     }
   }
 
-  // Unreachable for anything Cortex is allowed to return: the smallest size fits the
-  // longest legal headline in three lines with room to spare, which `wraps every legal
-  // headline without dropping a word` pins down. Past that, bound the block rather than
-  // let it fall through the scatter.
-  const fontSize = sizes[sizes.length - 1] ?? 20;
-  return { lines: wrapAt(words, fontSize, maxWidth).slice(0, maxLines), fontSize };
+  // Over budget even at the smallest size: print it all anyway rather than truncate.
+  const fontSize = sizes[sizes.length - 1] ?? 18;
+  return { lines: wrapAt(words, fontSize, maxWidth), fontSize };
+}
+
+/** Largest size at which a single line of `face` fits `maxWidth`. Never truncates. */
+export function fitOneLine(
+  text: string,
+  face: Face,
+  maxWidth: number,
+  sizes: readonly number[],
+  letterSpacing = 0,
+): number {
+  const width = (size: number): number =>
+    measure(text, size, face) + letterSpacing * Math.max(0, text.length - 1);
+
+  return sizes.find((size) => width(size) <= maxWidth) ?? sizes[sizes.length - 1] ?? 10;
 }

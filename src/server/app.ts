@@ -14,10 +14,7 @@ export interface AppDeps {
   clientRoot?: string;
 }
 
-/**
- * Routes. The serving path reads the bucket and nothing else — a cached repo page never
- * touches Snowflake or GitHub, which is what keeps a viral card from costing anything.
- */
+/** Routes. The serving path reads the bucket only — a cached page costs nothing. */
 export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): Hono {
   const app = new Hono();
 
@@ -47,19 +44,11 @@ export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): 
       return c.json({ error: 'quota_exceeded', repo: slug.slug }, 429);
     }
 
-    // Everything else is an attach, not an error: a second click, a reload, or a repo
-    // someone else already read all resolve to the state that already exists.
+    // Anything else is an attach, not an error: a reload resolves to the existing state.
     return c.json(outcome.state, outcome.accepted ? 202 : 200);
   });
 
-  /**
-   * The queue worker. Cloud Tasks calls this with an OIDC token; the pipeline therefore
-   * runs inside a request, which is what lets the service scale to zero and still finish
-   * a generation the user walked away from.
-   *
-   * This route is on a public service, so an unverified caller could otherwise spend
-   * Cortex credits at will. No token, no work.
-   */
+  // The queue worker. Public service, and this route spends Cortex credits: no token, no work.
   app.post('/internal/generate', async (c) => {
     if (!taskAuth || !(await taskAuth.verify(c.req.header('authorization')))) {
       return c.json({ error: 'unauthorized' }, 403);
@@ -70,8 +59,7 @@ export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): 
       const body: { repo?: unknown } = await c.req.json();
       slug = parseSlug(typeof body.repo === 'string' ? body.repo : '');
     } catch {
-      // A malformed task will never become well-formed. 200 retires it instead of
-      // letting Cloud Tasks retry it until the queue's deadline.
+      // 200 retires a malformed task; it will never become well-formed by retrying.
       return c.json({ error: 'invalid_repo' }, 200);
     }
 
@@ -104,8 +92,7 @@ export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): 
 
     return c.body(svg, 200, {
       'content-type': 'image/svg+xml; charset=utf-8',
-      // README embeds go through GitHub's camo proxy, which caches on these headers.
-      // Without them the neat trick becomes a broken badge.
+      // Camo caches on these. Without them the README embed becomes a broken badge.
       'cache-control': 'public, max-age=3600, s-maxage=86400',
     });
   });
@@ -114,8 +101,7 @@ export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): 
     app.use('/assets/*', serveStatic({ root: clientRoot }));
     app.use('/favicon.svg', serveStatic({ root: clientRoot }));
 
-    // The SPA owns `/` and `/{owner}/{repo}`. Anything deeper is a 404 rather than a page
-    // that pretends the route exists.
+    // The SPA owns `/` and `/{owner}/{repo}`. Anything deeper is a 404, not a fake page.
     const index = serveStatic({ root: clientRoot, path: 'index.html' });
     app.get('/', index);
     app.get('/:owner/:repo', index);

@@ -7,7 +7,14 @@ interface LandingProps {
 }
 
 /** Pre-generated, so a judge clicking one never waits on a cold Cortex call. */
-const EXAMPLES = ['anchildress1/save-the-sun', 'forem/forem', 'torvalds/linux'];
+// Three passion projects, three different storylines: a binge, a nocturne, a relapse. The
+// detector reads a personal arc, so a repo with a team behind it has nothing for it to find —
+// forem and linux both came back "no story here", which is true and a terrible advertisement.
+export const EXAMPLES = [
+  'anchildress1/save-the-sun',
+  'anchildress1/carbon-trace',
+  'anchildress1/legacy-smelter',
+];
 
 export function Landing({ onSubmit }: Readonly<LandingProps>): JSX.Element {
   return (

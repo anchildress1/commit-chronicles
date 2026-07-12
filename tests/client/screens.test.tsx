@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Failed } from '../../src/client/screens/Failed.js';
-import { Landing } from '../../src/client/screens/Landing.js';
+import { EXAMPLES, Landing } from '../../src/client/screens/Landing.js';
 import { Loading } from '../../src/client/screens/Loading.js';
 import { Nav } from '../../src/client/screens/Nav.js';
 import { RepoEntry } from '../../src/client/screens/RepoEntry.js';
@@ -79,9 +79,9 @@ describe('Landing', () => {
     const onSubmit = vi.fn();
     render(<Landing onSubmit={onSubmit} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'torvalds/linux' }));
+    await userEvent.click(screen.getByRole('button', { name: EXAMPLES[2]! }));
 
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ slug: 'torvalds/linux' }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ slug: EXAMPLES[2] }));
   });
 });
 

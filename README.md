@@ -237,7 +237,9 @@ QUALIFY ROW_NUMBER() OVER (
 
 ### 3. Cortex narrates _only_ the winning thread
 
-`CHRONICLE_CARD` is a hand-written SQL UDF wrapping `AI_COMPLETE` — one schema-constrained call that returns the whole card's writing.
+`CHRONICLE_CARD` is a hand-written SQL UDF wrapping `AI_COMPLETE` — one schema-constrained call that returns the whole card's writing. Model `claude-sonnet-4-5`, **`temperature 0.4`**, `max_tokens 2048`.
+
+The temperature is deliberate. At 0 the model writes the same flat, safe sentence about every repo — and a card nobody wants to share is a failed product. The facts are already pinned by the detector and re-verified in SQL afterwards, so the only thing warmth can move is the phrasing. Let it.
 
 It is fed `CARD_EVIDENCE`: the winning thread's commit lines, budgeted at **25% of the history, floored at 20 lines and capped at 140**. Never the whole repo — that's how you buy an expensive, unfocused paragraph. Squash-merge bodies are exploded into individual lines first, so work hidden inside a merge is still visible.
 

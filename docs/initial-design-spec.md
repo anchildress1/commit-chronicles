@@ -259,6 +259,8 @@ One call, fed **only the winning storyline's evidence**. Never the whole history
 
 Model: `claude-sonnet-4-5` via `AI_COMPLETE`, `temperature 0.4`, `max_tokens 2048`.
 
+**Temperature is 0.4 on purpose, and must not be dropped to 0.** Determinism belongs to the detector, and it has it — the same repo always yields the same storyline, the same evidence, and the same facts. Cortex's only job is the phrasing, and a zero-temperature model phrases every repo identically: the same cadence, the same safe adjective, the same card. Restraint in tone is a voice rule, not a sampling parameter. Every fact is pinned before the call and re-verified after it, so the only thing warmth can move is the writing — which is the part that has to be worth sharing.
+
 The response schema constrains exactly nine keys:
 
 ```json

@@ -87,7 +87,9 @@ Highest score wins; ties break by drama rank (`resurrection` > `collapse` > `rel
 
 ## Stage 2 — Cortex (one small call)
 
-Feed **only the winning thread's evidence** — 25% of its commit lines, floored at 20 and capped at 140, plus the first 5 and last 8 — alongside the computed facts. Model: `claude-sonnet-4-5`.
+Feed **only the winning thread's evidence** — 25% of its commit lines, floored at 20 and capped at 140, plus the first 5 and last 8 — alongside the computed facts. Model: `claude-sonnet-4-5`, `temperature 0.4`, `max_tokens 2048`.
+
+**Temperature 0.4, not 0.** The detector already pinned every fact and the SQL guard re-verifies the output, so warmth can only move the phrasing — and at 0 the model writes the same flat sentence about every repo. A card nobody shares is a failed product.
 
 It returns exactly nine keys:
 

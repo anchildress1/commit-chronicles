@@ -202,3 +202,50 @@ describe('cardAltText', () => {
     expect(renderCard(CARD)).toContain('aria-label=');
   });
 });
+
+describe('everything Cortex wrote reaches the card', () => {
+  it('draws the accent reason, in the colour it explains', () => {
+    const svg = renderCard({
+      ...CARD,
+      accent: '#e8a04a',
+      accentReason: 'amber, for a thing that burned out',
+    });
+
+    expect(svg).toContain('amber, for a thing that burned out');
+    // Set in the colour it is explaining, or it is just a caption.
+    expect(svg).toMatch(/<text[^>]*fill="#e8a04a"[^>]*font-style="italic"[^>]*>amber, for a thing/);
+  });
+
+  it('leaves no Cortex field off the card', () => {
+    const card = {
+      ...CARD,
+      kicker: 'zzkicker',
+      headlineUpright: 'zzupright',
+      headlineAccent: 'zzaccent',
+      headlineTrail: 'zztrail',
+      labelFirst: 'zzfirst',
+      labelLast: 'zzlast',
+      accentReason: 'zzreason',
+      statusLabel: 'active' as const,
+    };
+    const svg = renderCard(card);
+
+    // Nine keys come back from Cortex; the accent is the paint, the other eight are words.
+    for (const written of [
+      'zzkicker',
+      'zzupright',
+      'zzaccent',
+      'zztrail',
+      'zzfirst',
+      'zzlast',
+      'zzreason',
+    ]) {
+      expect(svg).toContain(written);
+    }
+  });
+
+  it('reads the colour reason out to a screen reader too', () => {
+    const alt = cardAltText({ ...CARD, accentReason: 'lime, for a repo that came back' });
+    expect(alt).toContain('lime, for a repo that came back');
+  });
+});

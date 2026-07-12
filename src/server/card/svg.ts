@@ -181,6 +181,15 @@ export function renderCard(payload: CardPayload): string {
   const pivotDot = findDot(geometry.dots, payload.pivotAt);
   const handle = facts.primaryAuthorLogin ?? facts.primaryAuthor;
 
+  // The attribution is right-anchored on the same row, so the reason gets what is left of it
+  // and shrinks rather than running underneath it.
+  const reasonSize = fitOneLine(
+    payload.accentReason.trim(),
+    'sans',
+    CARD.width - 120 - attributionWidth() - 24,
+    [13, 12, 11, 10, 9],
+  );
+
   const parts: string[] = [];
 
   parts.push(
@@ -357,6 +366,17 @@ export function renderCard(payload: CardPayload): string {
       family: SANS,
       fill: MUTED,
     }),
+    // Cortex chose the colour and said why. The reason is the last thing it wrote that the
+    // card was not showing, and it is the line that proves the palette is a reading of this
+    // repo rather than a brand constant. Set in the colour it is explaining.
+    text(payload.accentReason.trim(), {
+      x: 60,
+      y: 599,
+      size: reasonSize,
+      family: SANS,
+      fill: accent,
+      italic: true,
+    }),
     text(`@${handle}`, {
       x: CARD.width - 60,
       y: 573,
@@ -417,5 +437,5 @@ export function cardAltText(payload: CardPayload): string {
 
   return `Commit Chronicles card for ${payload.repo} — ${payload.kicker}. ${headline} ${caption(
     payload.facts.lastCommitAt,
-  )}`;
+  )} The card is ${payload.accentReason.trim()}.`;
 }

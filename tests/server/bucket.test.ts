@@ -20,15 +20,18 @@ interface FakeObject {
  */
 function fakeStorage(objects = new Map<string, FakeObject>()) {
   const saved: { path: string; contentType: string | undefined; cacheControl: unknown }[] = [];
+  const downloads: string[] = [];
 
   const storage = {
     bucket: () => ({
       file: (path: string) => ({
         download: () => {
+          downloads.push(path);
           const object = objects.get(path);
           if (!object) return Promise.reject(new GcsError(404));
           return Promise.resolve([Buffer.from(object.data, 'utf8')]);
         },
+        exists: () => Promise.resolve([objects.has(path)]),
         getMetadata: () => {
           const object = objects.get(path);
           if (!object) return Promise.reject(new GcsError(404));
@@ -58,7 +61,7 @@ function fakeStorage(objects = new Map<string, FakeObject>()) {
     }),
   };
 
-  return { storage, objects, saved };
+  return { storage, objects, saved, downloads };
 }
 
 const store = (fake: ReturnType<typeof fakeStorage>) =>
@@ -73,14 +76,24 @@ describe('readState', () => {
     });
   });
 
-  it('is ready when the card payload exists, and carries the accent', async () => {
+  it('is ready when the card exists — existence is the whole signal', async () => {
     const fake = fakeStorage();
     await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
 
-    await expect(store(fake).readState('atlas', 'pipeline')).resolves.toMatchObject({
+    await expect(store(fake).readState('atlas', 'pipeline')).resolves.toEqual({
       status: 'ready',
-      accent: '#e8a04a',
+      repo: 'atlas/pipeline',
     });
+  });
+
+  it('does not download the card just to learn that it exists', async () => {
+    const fake = fakeStorage();
+    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+    fake.downloads.length = 0;
+
+    await store(fake).readState('atlas', 'pipeline');
+
+    expect(fake.downloads).not.toContain('cards/atlas/pipeline/card.json');
   });
 
   it('lets a real card outrank a stale generating marker', async () => {
@@ -112,6 +125,7 @@ describe('readState', () => {
       file: () => ({
         download: () => Promise.reject(new GcsError(500)),
         getMetadata: () => Promise.reject(new GcsError(500)),
+        exists: () => Promise.reject(new GcsError(500)),
         save: () => Promise.resolve(),
         delete: () => Promise.resolve(),
       }),

@@ -77,8 +77,6 @@ test('a ready repo shows the card and the README embed', async ({ page }) => {
     'atlas/pipeline': {
       status: 'ready',
       repo: 'atlas/pipeline',
-      accent: '#d3e85a',
-      generatedAt: '2026-07-11',
     },
   });
 
@@ -90,16 +88,14 @@ test('a ready repo shows the card and the README embed', async ({ page }) => {
   );
 });
 
-test('the shell keeps the brand colour, whatever accent Cortex chose', async ({ page }) => {
-  // Cortex's accent is a reading of one repo's arc. It belongs on that repo's card — the
-  // SVG carries it — and repainting the whole site around it would make the product look
-  // like it changes identity per visitor.
+test('the shell keeps the brand colour', async ({ page }) => {
+  // Cortex's accent is a reading of one repo's arc: it belongs on that repo's card, which
+  // is an SVG that carries the colour itself. The state endpoint does not even report it,
+  // so the shell has nothing to repaint itself with — which is the point.
   await stubApi(page, {
     'atlas/pipeline': {
       status: 'ready',
       repo: 'atlas/pipeline',
-      accent: '#d3e85a',
-      generatedAt: '2026-07-11',
     },
   });
 

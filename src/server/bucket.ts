@@ -9,7 +9,7 @@ import type { CardPayload } from './card/types.js';
  */
 
 export type JobState =
-  | { status: 'ready'; repo: string; accent: string; generatedAt: string }
+  | { status: 'ready'; repo: string }
   | { status: 'generating'; repo: string; startedAt: string }
   | { status: 'failed'; repo: string; errorCode: string; failedAt: string; reasons?: string[] }
   | { status: 'unknown'; repo: string };
@@ -52,16 +52,12 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
     async readState(owner, repo) {
       const base = prefix(owner, repo);
 
-      // Ready is checked first and checked by existence: a card in the bucket is a card,
-      // whatever a stale marker next to it might claim.
-      const card = await readJson(`${base}/card.json`);
-      if (card) {
-        return {
-          status: 'ready',
-          repo: `${owner}/${repo}`,
-          accent: (card.value as CardPayload).accent,
-          generatedAt: (card.value as CardPayload).generatedAt,
-        };
+      // Ready is checked first, and checked by existence — a card in the bucket is a card,
+      // whatever a stale marker next to it might claim. Nothing reads the payload here, so
+      // this asks whether the object is there rather than downloading it to find out.
+      const [ready] = await bucket.file(`${base}/card.json`).exists();
+      if (ready) {
+        return { status: 'ready', repo: `${owner}/${repo}` };
       }
 
       const state = await readJson(`${base}/state.json`);

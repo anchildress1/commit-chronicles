@@ -93,7 +93,7 @@ describe('POST /api/generate', () => {
     const response = await generate(app, 'atlas/pipeline');
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ status: 'ready', accent: '#e8a04a' });
+    expect(await response.json()).toMatchObject({ status: 'ready', repo: 'atlas/pipeline' });
   });
 
   it('normalizes a full GitHub URL', async () => {
@@ -201,14 +201,14 @@ describe('GET /api/state/:owner/:repo', () => {
     expect(await response.json()).toEqual({ status: 'unknown', repo: 'atlas/pipeline' });
   });
 
-  it('reports ready with the accent once the card exists', async () => {
+  it('reports ready once the card exists', async () => {
     const { app, queue } = harness();
     await generate(app, 'atlas/pipeline');
     await queue.deliver();
 
     const response = await app.request('/api/state/atlas/pipeline');
 
-    expect(await response.json()).toMatchObject({ status: 'ready', accent: '#e8a04a' });
+    expect(await response.json()).toMatchObject({ status: 'ready', repo: 'atlas/pipeline' });
   });
 
   it('is never cached — a polling client must see the transition', async () => {

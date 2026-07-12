@@ -50,9 +50,9 @@ describe('requestGeneration', () => {
 
 describe('fetchState', () => {
   it('reads the state', async () => {
-    mockFetch(200, { status: 'ready', repo: 'atlas/pipeline', accent: '#e8a04a' });
+    mockFetch(200, { status: 'ready', repo: 'atlas/pipeline' });
 
-    await expect(fetchState(SLUG)).resolves.toMatchObject({ accent: '#e8a04a' });
+    await expect(fetchState(SLUG)).resolves.toMatchObject({ status: 'ready' });
   });
 
   it('throws when the state endpoint fails', async () => {

@@ -5,8 +5,6 @@ export type JobStatus = 'unknown' | 'generating' | 'ready' | 'failed';
 export interface JobState {
   status: JobStatus;
   repo: string;
-  accent?: string;
-  generatedAt?: string;
   startedAt?: string;
   errorCode?: string;
   reasons?: string[];

@@ -64,7 +64,7 @@ describe('useJob', () => {
 
   it('shows a cached card without asking for a generation', async () => {
     const calls = router({
-      state: () => ({ status: 'ready', repo: 'atlas/pipeline', accent: '#e8a04a' }),
+      state: () => ({ status: 'ready', repo: 'atlas/pipeline' }),
     });
 
     const { result } = renderHook(() => useJob(SLUG));
@@ -94,7 +94,7 @@ describe('useJob', () => {
       state: () => {
         reads += 1;
         return reads > 2
-          ? { status: 'ready', repo: 'atlas/pipeline', accent: '#d3e85a' }
+          ? { status: 'ready', repo: 'atlas/pipeline' }
           : { status: 'unknown', repo: 'atlas/pipeline' };
       },
     });
@@ -111,7 +111,6 @@ describe('useJob', () => {
     await waitFor(() => {
       expect(result.current.state?.status).toBe('ready');
     });
-    expect(result.current.state?.accent).toBe('#d3e85a');
   });
 
   it('reports the quota cap in words the reader can act on', async () => {

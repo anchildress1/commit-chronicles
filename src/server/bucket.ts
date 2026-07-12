@@ -15,10 +15,17 @@ export interface CardStore {
   readState(owner: string, repo: string): Promise<JobState>;
   /** The rendered card, or null when there is none. */
   readCardSvg(owner: string, repo: string): Promise<string | null>;
-  /** Claim the repo, so a second click cannot pay for a second Cortex call. */
-  markGenerating(owner: string, repo: string): Promise<void>;
+  /**
+   * Claim the repo for generation.
+   *
+   * @returns False when another caller already holds the claim — the write is create-only,
+   *   so two concurrent requests for one cold repo cannot both start a Cortex call.
+   */
+  claimGenerating(owner: string, repo: string): Promise<boolean>;
   /** Cache a failure, so a bad slug cannot be retried into a bill. */
   markFailed(owner: string, repo: string, errorCode: string, reasons?: string[]): Promise<void>;
+  /** Drop the state marker. Used to release a claim that was never followed through. */
+  clearState(owner: string, repo: string): Promise<void>;
   /** Publish the card and clear the generating marker. The SVG lands before the payload. */
   writeCard(owner: string, repo: string, svg: string, payload: CardPayload): Promise<void>;
   /**
@@ -84,16 +91,35 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
       }
     },
 
-    async markGenerating(owner, repo) {
+    async claimGenerating(owner, repo) {
       const state: JobState = {
         status: 'generating',
         repo: `${owner}/${repo}`,
         startedAt: new Date().toISOString(),
       };
-      await bucket.file(`${prefix(owner, repo)}/state.json`).save(JSON.stringify(state), {
-        contentType: 'application/json',
-        metadata: { cacheControl: 'no-store' },
-      });
+
+      try {
+        // ifGenerationMatch: 0 means "only if this object does not exist". Two requests for
+        // the same cold repo race here, and exactly one wins.
+        await bucket.file(`${prefix(owner, repo)}/state.json`).save(JSON.stringify(state), {
+          contentType: 'application/json',
+          metadata: { cacheControl: 'no-store' },
+          preconditionOpts: { ifGenerationMatch: 0 },
+        });
+        return true;
+      } catch (error) {
+        if (isPreconditionFailed(error)) return false;
+        throw error;
+      }
+    },
+
+    async clearState(owner, repo) {
+      await bucket
+        .file(`${prefix(owner, repo)}/state.json`)
+        .delete()
+        .catch((error: unknown) => {
+          if (!isNotFound(error)) throw error;
+        });
     },
 
     async markFailed(owner, repo, errorCode, reasons) {

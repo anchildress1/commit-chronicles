@@ -113,6 +113,12 @@ export function createGenerator(deps: GeneratorDeps): Generator {
         }
       }
 
+      // The claim below is create-only, so any marker standing in its place has to go
+      // first: a retryable failure we are about to re-run, or a dead run's abandoned claim.
+      if (state.status !== 'unknown') {
+        await store.clearState(slug.owner, slug.repo);
+      }
+
       if (!(await store.claimDailyQuota(config.dailyGenerationCap, today(now())))) {
         log('quota exceeded', { repo: slug.slug });
         return {
@@ -122,10 +128,26 @@ export function createGenerator(deps: GeneratorDeps): Generator {
         };
       }
 
-      // Marker before task: a failed enqueue strands the repo only until the TTL lapses,
-      // where the reverse order would run a job nothing had claimed.
-      await store.markGenerating(slug.owner, slug.repo);
-      await queue.enqueue(slug);
+      // The claim is a create-only write. Two requests for the same cold repo reach here
+      // together — the readState above cannot separate them — and exactly one wins. The
+      // loser is told it is already generating rather than enqueueing a second Cortex call.
+      const claimed = await store.claimGenerating(slug.owner, slug.repo);
+      if (!claimed) {
+        return {
+          accepted: false,
+          reason: 'already_generating',
+          state: await store.readState(slug.owner, slug.repo),
+        };
+      }
+
+      try {
+        await queue.enqueue(slug);
+      } catch (error) {
+        // Nothing will ever pick this up, so release the claim instead of stranding the
+        // repo on `generating` until the TTL lapses.
+        await store.clearState(slug.owner, slug.repo);
+        throw error;
+      }
 
       return {
         accepted: true,

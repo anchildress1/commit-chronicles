@@ -47,20 +47,25 @@ export function createSnowflakeClient(config: Config): SnowflakeClient {
 
   const query = async (sqlText: string, binds: string[]): Promise<Record<string, unknown>[]> =>
     new Promise<Record<string, unknown>[]>((resolve, reject) => {
-      void pool.use(
-        async (connection) =>
-          new Promise<void>((settle) => {
-            connection.execute({
-              sqlText,
-              binds,
-              complete: (error, _statement, result) => {
-                if (error) reject(error);
-                else resolve((result ?? []) as Record<string, unknown>[]);
-                settle();
-              },
-            });
-          }),
-      );
+      pool
+        .use(
+          async (connection) =>
+            new Promise<void>((settle) => {
+              connection.execute({
+                sqlText,
+                binds,
+                complete: (error, _statement, result) => {
+                  if (error) reject(error);
+                  else resolve((result ?? []) as Record<string, unknown>[]);
+                  settle();
+                },
+              });
+            }),
+        )
+        // A connection that cannot be acquired, or a pool that is draining, rejects here
+        // and never reaches `complete`. Dropped, it leaves this promise unsettled and the
+        // repo stuck on `generating` until the task deadline.
+        .catch(reject);
     });
 
   // The driver hands back VARIANT as a JSON string unless the column is typed.

@@ -35,13 +35,21 @@ export function fakeStore(): FakeStore {
 
     readCardSvg: (owner, repo) => Promise.resolve(cards.get(key(owner, repo))?.svg ?? null),
 
-    markGenerating: (owner, repo) => {
+    claimGenerating: (owner, repo) => {
+      // Create-only, exactly like the bucket: a claim that already exists cannot be taken.
+      if (states.has(key(owner, repo))) return Promise.resolve(false);
+
       writes.push(`generating:${key(owner, repo)}`);
       states.set(key(owner, repo), {
         status: 'generating',
         repo: key(owner, repo),
         startedAt: new Date().toISOString(),
       });
+      return Promise.resolve(true);
+    },
+
+    clearState: (owner, repo) => {
+      states.delete(key(owner, repo));
       return Promise.resolve();
     },
 

@@ -48,7 +48,7 @@ export function Landing({ onSubmit }: LandingProps): JSX.Element {
       </div>
 
       <p className="fineprint" data-anim style={{ animationDelay: '0.32s' }}>
-        Reads public commit history only · nothing is stored
+        Reads public commit history only · the card it makes is public
       </p>
     </main>
   );

@@ -102,7 +102,7 @@ describe('start', () => {
     expect(queue.enqueued).toHaveLength(1);
   });
 
-  it.each(['repo_not_found', 'repo_private', 'repo_empty', 'repo_too_large', 'no_commits'])(
+  it.each(['repo_not_found', 'repo_private', 'repo_empty', 'repo_oversized', 'no_commits'])(
     'never re-runs a %s failure — the answer cannot change',
     async (errorCode) => {
       const { generator, store, queue, snowflake } = harness(() => CARD);
@@ -196,6 +196,42 @@ describe('start', () => {
     await generator.start(SLUG);
 
     expect(store.quotaUsed).toBe(1);
+  });
+
+  it('lets one of two concurrent requests for a cold repo through, not both', async () => {
+    // readState cannot separate them: both see `unknown`. The claim is what decides, and a
+    // second Cortex call for one repo is money.
+    const { generator, queue, snowflake } = harness(() => CARD);
+
+    const [a, b] = await Promise.all([generator.start(SLUG), generator.start(SLUG)]);
+
+    expect([a.accepted, b.accepted].filter(Boolean)).toHaveLength(1);
+    expect(queue.enqueued).toHaveLength(1);
+
+    await queue.deliver();
+    expect(snowflake.calls).toEqual(['atlas/pipeline']);
+  });
+
+  it('releases the claim when the queue refuses the task', async () => {
+    // Nothing will pick it up, so leaving the marker would strand the repo until the TTL.
+    const store = fakeStore();
+    const snowflake = fakeSnowflake(() => CARD);
+    const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+    queue.enqueue = () => Promise.reject(new Error('queue is down'));
+
+    const generator = createGenerator({ store, snowflake, config: config(), queue });
+
+    await expect(generator.start(SLUG)).rejects.toThrow('queue is down');
+    expect(store.states.get('atlas/pipeline')).toBeUndefined();
+
+    // And the repo can still be read once the queue is back.
+    const recovered = createGenerator({
+      store,
+      snowflake,
+      config: config(),
+      queue: fakeQueue((slug) => runGeneration({ store, snowflake }, slug)),
+    });
+    await expect(recovered.start(SLUG)).resolves.toMatchObject({ accepted: true });
   });
 
   it('marks the repo generating before the task is enqueued', async () => {

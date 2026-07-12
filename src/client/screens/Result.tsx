@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { RepoSlug } from '../../shared/slug.js';
 import { cardUrl, embedMarkdown } from '../api.js';
 
@@ -10,12 +10,24 @@ interface ResultProps {
 
 function useCopy(): [boolean, (value: string) => void] {
   const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // The "copied" flag resets on a timer. Leaving on a click strands it, and it fires into
+  // a component that no longer exists.
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const copy = (value: string): void => {
     // A denied clipboard permission must not take the page down with it.
     void navigator.clipboard.writeText(value).catch(() => undefined);
     setCopied(true);
-    setTimeout(() => {
+
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
       setCopied(false);
     }, 1600);
   };

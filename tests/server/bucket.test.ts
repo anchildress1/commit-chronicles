@@ -98,7 +98,7 @@ describe('readState', () => {
 
   it('lets a real card outrank a stale generating marker', async () => {
     const fake = fakeStorage();
-    await store(fake).markGenerating('atlas', 'pipeline');
+    await store(fake).claimGenerating('atlas', 'pipeline');
     fake.objects.set('cards/atlas/pipeline/card.json', {
       data: JSON.stringify(CARD),
       generation: 1,
@@ -158,7 +158,7 @@ describe('writeCard', () => {
 
   it('clears the generating marker once the card lands', async () => {
     const fake = fakeStorage();
-    await store(fake).markGenerating('atlas', 'pipeline');
+    await store(fake).claimGenerating('atlas', 'pipeline');
     await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
 
     expect(fake.objects.has('cards/atlas/pipeline/state.json')).toBe(false);
@@ -182,6 +182,41 @@ describe('readCardSvg', () => {
 
   it('returns null when there is no card', async () => {
     await expect(store(fakeStorage()).readCardSvg('atlas', 'pipeline')).resolves.toBeNull();
+  });
+});
+
+describe('claimGenerating', () => {
+  it('grants the claim on a repo nobody holds', async () => {
+    await expect(store(fakeStorage()).claimGenerating('atlas', 'pipeline')).resolves.toBe(true);
+  });
+
+  it('refuses a repo already claimed — two cold requests cannot both spend a Cortex call', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+
+    await expect(cards.claimGenerating('atlas', 'pipeline')).resolves.toBe(true);
+    await expect(cards.claimGenerating('atlas', 'pipeline')).resolves.toBe(false);
+  });
+
+  it('lets exactly one of two concurrent claims win', async () => {
+    const cards = store(fakeStorage());
+
+    const [a, b] = await Promise.all([
+      cards.claimGenerating('atlas', 'pipeline'),
+      cards.claimGenerating('atlas', 'pipeline'),
+    ]);
+
+    expect([a, b].filter(Boolean)).toHaveLength(1);
+  });
+
+  it('can be released, so a run that died is retryable', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+
+    await cards.claimGenerating('atlas', 'pipeline');
+    await cards.clearState('atlas', 'pipeline');
+
+    await expect(cards.claimGenerating('atlas', 'pipeline')).resolves.toBe(true);
   });
 });
 

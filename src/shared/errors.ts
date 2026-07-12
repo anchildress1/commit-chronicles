@@ -6,7 +6,8 @@ const TERMINAL_ERRORS = new Set([
   'repo_not_found',
   'repo_private',
   'repo_empty',
-  'repo_too_large',
+  // The code INGEST_REPO_COMMITS actually returns past the commit cap.
+  'repo_oversized',
   'no_commits',
 ]);
 

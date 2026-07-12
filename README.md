@@ -30,8 +30,9 @@ SPA  →  POST /api/generate  →  Cloud Tasks  →  /internal/generate
 ```
 
 - **Snowflake is the app.** It fetches its own data through an external access integration,
-  finds the story with window functions, and shows Cortex only the winning thread's ~20
-  commits — never the whole history.
+  finds the story with window functions, and shows Cortex only the winning thread — a
+  quarter of the material, capped, never the whole history. Squash-merge bodies are split
+  into line items first, so the work inside a merge is visible.
 - **Cloud Run computes nothing.** It guards the request, calls one stored procedure, turns
   the returned payload into an SVG, and writes it to the bucket.
 - **The bucket is the cache of record.** A card's existence in it _is_ the ready state.
@@ -48,7 +49,7 @@ decision rather than a plumbing one.
 
 ```bash
 make install     # deps + git hooks
-make dev         # API on :8080, SPA on :5173
+make dev         # API on :8080, SPA on :5273
 make ai-checks   # format, lint, typecheck, test, build — the full gate
 ```
 

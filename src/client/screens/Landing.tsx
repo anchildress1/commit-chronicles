@@ -7,7 +7,7 @@ interface LandingProps {
 }
 
 /** Pre-generated, so a judge clicking one never waits on a cold Cortex call. */
-const EXAMPLES = ['anchildress1/rai-lint', 'anchildress1/my-hermantic-agent', 'torvalds/linux'];
+const EXAMPLES = ['anchildress1/save-the-sun', 'anchildress1/forem', 'torvalds/linux'];
 
 export function Landing({ onSubmit }: Readonly<LandingProps>): JSX.Element {
   return (

@@ -136,25 +136,20 @@ function attributionWidth(): number {
 }
 
 /**
- * The signature beside the attribution: a six-spoke crystal with a glow behind it.
+ * The product mark: three commits falling later into the night, the last one lit.
  *
- * The card says who read it once, in words. This says it again in a mark, which is what a
- * reader remembers and what survives being shrunk into a README.
+ * The card's own grammar — a hollow daylight dot, a night dot, and the accent dot that
+ * ends the story. The same mark signs the card and heads the site.
  */
-function crystal(cx: number, cy: number, accent: string, r = 5): string {
-  const spokes = [0, 60, 120]
-    .map((deg) => {
-      const rad = (deg * Math.PI) / 180;
-      const dx = round(Math.cos(rad) * r);
-      const dy = round(Math.sin(rad) * r);
-      return `<line x1="${round(cx - dx)}" y1="${round(cy - dy)}" x2="${round(cx + dx)}" y2="${round(cy + dy)}" stroke="${accent}" stroke-width="${round(r * 0.24)}" stroke-linecap="round"/>`;
-    })
-    .join('');
+function mark(cx: number, cy: number, accent: string, scale = 1): string {
+  const s = (n: number): number => round(n * scale);
+  const dot = 2.4 * scale;
 
   return [
-    `<circle cx="${cx}" cy="${cy}" r="${round(r * 1.8)}" fill="url(#glowMark)"/>`,
-    spokes,
-    `<circle cx="${cx}" cy="${cy}" r="${round(r * 0.34)}" fill="${accent}"/>`,
+    `<circle cx="${round(cx - s(7))}" cy="${round(cy - s(5))}" r="${round(dot * 0.8)}" fill="none" stroke="${INK}" stroke-opacity="0.55" stroke-width="${round(1.1 * scale)}"/>`,
+    `<circle cx="${cx}" cy="${cy}" r="${round(dot * 0.85)}" fill="${INK}" fill-opacity="0.8"/>`,
+    `<circle cx="${round(cx + s(7))}" cy="${round(cy + s(5))}" r="${round(dot * 2.6)}" fill="url(#glowMark)"/>`,
+    `<circle cx="${round(cx + s(7))}" cy="${round(cy + s(5))}" r="${round(dot * 1.15)}" fill="${accent}"/>`,
   ].join('');
 }
 
@@ -197,9 +192,9 @@ export function renderCard(payload: CardPayload): string {
 
   // Header: product mark, then the observed meta. No opinion in this row.
   parts.push(
-    crystal(74, 70, accent, 9),
+    mark(76, 70, accent, 1.6),
     text('Commit Chronicles', {
-      x: 96,
+      x: 104,
       y: 78,
       size: 22,
       family: SERIF,
@@ -376,7 +371,7 @@ export function renderCard(payload: CardPayload): string {
       anchor: 'end',
     }),
     // Right-anchored, so the mark is placed from measured width, not a fixed offset.
-    crystal(round(CARD.width - 60 - attributionWidth() - 14), 591, accent),
+    mark(round(CARD.width - 60 - attributionWidth() - 22), 591, accent, 0.8),
     text('Read by Snowflake Cortex', {
       x: CARD.width - 60,
       y: 595,

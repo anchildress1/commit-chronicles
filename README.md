@@ -6,6 +6,8 @@ Paste a public GitHub repo. **Snowflake fetches its own commit history, finds th
 
 [![CI](https://github.com/anchildress1/commit-chronicles/actions/workflows/ci.yml/badge.svg)](https://github.com/anchildress1/commit-chronicles/actions/workflows/ci.yml) [![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-blue)](LICENSE) [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196)](https://www.conventionalcommits.org/)
 
+![Commit Chronicles](https://repository-images.githubusercontent.com/1296802597/3d5d4e9b-0ea6-4ff1-b0a9-80e1947d7be3)
+
 **Live:** [commitchronicles.anchildress1.dev](https://commitchronicles.anchildress1.dev) · **Prize target:** Best Use of Snowflake
 
 Three real repos, three storylines the detector found unaided — a **binge**, a **nocturne**, and a **relapse**. Every dot, timestamp, and quoted commit below is real:

@@ -119,14 +119,14 @@ body {
 .stage {
   max-width: 820px;
   margin: 0 auto;
-  padding: 12vh 40px 16vh;
+  padding: 10vh 40px 6vh;
   text-align: center;
 }
 
 .stage--result {
   --card-width: min(1060px, 100%);
   max-width: 1140px;
-  padding: 3vh 40px 10vh;
+  padding: 3vh 40px 5vh;
   text-align: center;
 }
 
@@ -537,16 +537,24 @@ body {
   min-height: 100dvh;
 }
 
-.shell > .stage,
+/* Absorbs the slack, so a short page still pushes the footer to the bottom. */
 .shell > main {
-  flex: 1;
+  flex: 1 0 auto;
 }
 
-/* Footer */
+/* Footer
+   `sticky`, not `fixed`: it pins to the viewport bottom in a short embed iframe, but it
+   still occupies space in normal flow, so it can never sit on top of the card the way a
+   fixed bar would on a phone. */
 .footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
   margin-top: auto;
-  padding: 28px 40px;
+  padding: 20px 40px;
   border-top: 1px solid var(--line);
+  background: rgba(8, 11, 18, 0.88);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: space-between;

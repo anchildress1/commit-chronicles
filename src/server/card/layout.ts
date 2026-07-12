@@ -65,10 +65,43 @@ export interface PlotGeometry {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**
+ * The swarm's budget. A dot is r=4.5, so two of them clear each other at 9px; the step
+ * matches that, because a candidate closer than the minimum can never be accepted and only
+ * costs a pass. Seven slots is enough for the nights a person actually has.
+ */
+const SWARM_MIN_DISTANCE = 9;
+const SWARM_STEP = 9;
+const SWARM_MAX_OFFSET = 27;
+
+/**
+ * Nudge a dot sideways until it stops sitting on a dot already placed.
+ *
+ * The hour never moves; only the day slides, and only within the cluster's width. Candidates
+ * are tried in a fixed order, so the same history always draws the same card.
+ *
+ * @returns The base x when the swarm is full, rather than hiding the commit.
+ */
+function swarmX(baseX: number, y: number, placed: { x: number; y: number }[]): number {
+  const clear = (x: number): boolean =>
+    placed.every((dot) => Math.hypot(dot.x - x, dot.y - y) >= SWARM_MIN_DISTANCE);
+
+  if (clear(baseX)) return baseX;
+
+  for (let step = SWARM_STEP; step <= SWARM_MAX_OFFSET; step += SWARM_STEP) {
+    for (const candidate of [baseX + step, baseX - step]) {
+      if (clear(candidate)) return candidate;
+    }
+  }
+
+  return baseX;
+}
+
+/**
  * Lay out every commit, plus the axis ticks.
  *
  * Rows are sorted here, and `m` is honoured because the card annotates exact times rather
- * than whole hours.
+ * than whole hours. Crowded dots are offset horizontally so four commits in one night read
+ * as four dots.
  *
  * @param plot Snowflake's `PLOT` array, in any order.
  */
@@ -81,13 +114,16 @@ export function buildPlot(plot: PlotPoint[], box: PlotBox): PlotGeometry {
   const endMs = points[points.length - 1]?.ms ?? startMs + 1;
   const lastIndex = points.length - 1;
 
-  const dots = points.map((p, index) => ({
-    x: timeToX(p.ms, startMs, endMs, box),
-    y: hourToY(p.h + p.m / 60, box),
-    night: p.n,
-    last: index === lastIndex,
-    t: p.t,
-  }));
+  // A beeswarm, because a repo that commits four times in one night is four dots, and
+  // stacked exactly they render as one.
+  const placed: { x: number; y: number }[] = [];
+  const dots = points.map((p, index) => {
+    const y = hourToY(p.h + p.m / 60, box);
+    const x = swarmX(timeToX(p.ms, startMs, endMs, box), y, placed);
+    placed.push({ x, y });
+
+    return { x, y, night: p.n, last: index === lastIndex, t: p.t };
+  });
 
   return {
     dots,
@@ -95,8 +131,9 @@ export function buildPlot(plot: PlotPoint[], box: PlotBox): PlotGeometry {
     endMs,
     xTicks: monthTicks(startMs, endMs, box),
     yTicks: [
-      { y: hourToY(18, box), label: '6 pm' },
-      { y: hourToY(0, box), label: 'midnight' },
+      { y: hourToY(9, box), label: '9 am' },
+      { y: hourToY(15, box), label: '3 pm' },
+      { y: hourToY(21, box), label: '9 pm' },
       { y: hourToY(3, box), label: '3 am' },
     ],
   };

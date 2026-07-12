@@ -9,6 +9,7 @@ import {
   plotBox,
   timeToX,
 } from '../../src/server/card/layout.js';
+import type { PlotPoint } from '../../src/server/card/types.js';
 import { DESCENT_PLOT, ts } from '../fixtures/card.js';
 
 /** A two-line headline, the common case. */
@@ -109,6 +110,70 @@ describe('buildPlot', () => {
 
   it('survives an empty plot', () => {
     expect(buildPlot([], BOX).dots).toEqual([]);
+  });
+});
+
+describe('the beeswarm', () => {
+  /** Four commits in one night, at nearly the same hour: the worst overplotting case. */
+  const CLUSTER: PlotPoint[] = [
+    { t: ts('2026-01-05T02:00:00'), d: '2026-01-05', h: 2, m: 0, n: true },
+    { t: ts('2026-01-05T02:05:00'), d: '2026-01-05', h: 2, m: 5, n: true },
+    { t: ts('2026-01-05T02:10:00'), d: '2026-01-05', h: 2, m: 10, n: true },
+    { t: ts('2026-01-05T02:15:00'), d: '2026-01-05', h: 2, m: 15, n: true },
+    { t: ts('2026-02-20T02:00:00'), d: '2026-02-20', h: 2, m: 0, n: true },
+  ];
+
+  it('draws four commits in one night as four dots, not one', () => {
+    const { dots } = buildPlot(CLUSTER, BOX);
+    const night = dots.slice(0, 4);
+
+    for (let i = 0; i < night.length; i += 1) {
+      for (let j = i + 1; j < night.length; j += 1) {
+        const a = night[i]!;
+        const b = night[j]!;
+        expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThanOrEqual(8.9);
+      }
+    }
+  });
+
+  it('never moves the hour — only the day slides', () => {
+    const swarmed = buildPlot(CLUSTER, BOX).dots;
+    const unswarmed = CLUSTER.map((p) => hourToY(p.h + p.m / 60, BOX)).sort((a, b) => a - b);
+
+    expect(swarmed.map((dot) => dot.y).sort((a, b) => a - b)).toEqual(unswarmed);
+  });
+
+  it('keeps the slide inside the cluster, not across the axis', () => {
+    const { dots, startMs, endMs } = buildPlot(CLUSTER, BOX);
+
+    for (const [index, dot] of dots.entries()) {
+      const trueX = timeToX(
+        new Date(CLUSTER[index]!.t.replace(' ', 'T').slice(0, 19)).getTime(),
+        startMs,
+        endMs,
+        BOX,
+      );
+      expect(Math.abs(dot.x - trueX)).toBeLessThanOrEqual(28);
+    }
+  });
+
+  it('draws the same card twice for the same history', () => {
+    const a = buildPlot(CLUSTER, BOX).dots.map((dot) => [dot.x, dot.y]);
+    const b = buildPlot([...CLUSTER].reverse(), BOX).dots.map((dot) => [dot.x, dot.y]);
+
+    expect(a).toEqual(b);
+  });
+
+  it('hides no commit, however crowded the night', () => {
+    const crowded: PlotPoint[] = Array.from({ length: 30 }, (_, i) => ({
+      t: ts(`2026-01-05T02:${String(i % 60).padStart(2, '0')}:00`),
+      d: '2026-01-05',
+      h: 2,
+      m: i % 60,
+      n: true,
+    }));
+
+    expect(buildPlot(crowded, BOX).dots).toHaveLength(30);
   });
 });
 

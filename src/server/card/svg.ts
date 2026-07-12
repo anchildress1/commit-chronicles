@@ -26,7 +26,7 @@ const MUTED = '#b6b3aa';
 const DIM = '#77756d';
 
 /** The headline column is deliberately narrow. The frame is the hard limit. */
-const HEADLINE_COLUMN = 620;
+const HEADLINE_COLUMN = 720;
 const HEADLINE_FRAME = CARD.width - 120;
 const HEADLINE_TOP = 190;
 
@@ -86,6 +86,7 @@ function renderHeadline(payload: CardPayload, accent: string): Headline {
     maxWidth: HEADLINE_COLUMN,
     hardMax: HEADLINE_FRAME,
     heightBudget: HEADLINE_BUDGET,
+    sizes: [48, 44, 40, 36, 32, 28, 24],
   });
   const lineHeight = fontSize * LINE_HEIGHT;
 
@@ -107,17 +108,21 @@ function renderHeadline(payload: CardPayload, accent: string): Headline {
 }
 
 function renderDot(dot: Dot, accent: string): string {
+  const cx = round(dot.x);
+  const cy = round(dot.y);
+
   if (dot.last) {
     return [
-      `<circle cx="${round(dot.x)}" cy="${round(dot.y)}" r="12" fill="${accent}" fill-opacity="0.22"/>`,
-      `<circle cx="${round(dot.x)}" cy="${round(dot.y)}" r="7" fill="${accent}"/>`,
+      `<circle cx="${cx}" cy="${cy}" r="13" fill="${accent}" fill-opacity="0.18"/>`,
+      `<circle cx="${cx}" cy="${cy}" r="7.5" fill="${accent}" stroke="${BACKDROP}" stroke-width="2"/>`,
     ].join('');
   }
 
-  // Hollow by day, solid by night: the descent has to read before the words do.
+  // The ring is the surface colour, not a border: where two commits land on the same hour
+  // it keeps them countable instead of fusing them into one larger dot.
   return dot.night
-    ? `<circle cx="${round(dot.x)}" cy="${round(dot.y)}" r="4.5" fill="${INK}" opacity="0.92"/>`
-    : `<circle cx="${round(dot.x)}" cy="${round(dot.y)}" r="4" fill="none" stroke="${INK}" stroke-opacity="0.42" stroke-width="1.5"/>`;
+    ? `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${INK}" fill-opacity="0.92" stroke="${BACKDROP}" stroke-width="2"/>`
+    : `<circle cx="${cx}" cy="${cy}" r="4.5" fill="none" stroke="${INK}" stroke-opacity="0.5" stroke-width="1.5"/>`;
 }
 
 const ATTRIBUTION = 'Read by Snowflake Cortex';
@@ -249,9 +254,9 @@ export function renderCard(payload: CardPayload): string {
   if (voidPanel && facts.largestGap) {
     const mid = voidPanel.x + voidPanel.width / 2;
     parts.push(
-      `<rect x="${round(voidPanel.x)}" y="${round(box.y)}" width="${round(voidPanel.width)}" height="${round(box.height)}" fill="#000000" fill-opacity="0.28"/>`,
-      `<line x1="${round(voidPanel.x)}" y1="${round(box.y)}" x2="${round(voidPanel.x)}" y2="${round(box.y + box.height)}" stroke="${accent}" stroke-opacity="0.35" stroke-dasharray="3 4"/>`,
-      `<line x1="${round(voidPanel.x + voidPanel.width)}" y1="${round(box.y)}" x2="${round(voidPanel.x + voidPanel.width)}" y2="${round(box.y + box.height)}" stroke="${accent}" stroke-opacity="0.35" stroke-dasharray="3 4"/>`,
+      `<rect x="${round(voidPanel.x)}" y="${round(box.y)}" width="${round(voidPanel.width)}" height="${round(box.height)}" fill="#000000" fill-opacity="0.45"/>`,
+      `<line x1="${round(voidPanel.x)}" y1="${round(box.y)}" x2="${round(voidPanel.x)}" y2="${round(box.y + box.height)}" stroke="${accent}" stroke-opacity="0.4"/>`,
+      `<line x1="${round(voidPanel.x + voidPanel.width)}" y1="${round(box.y)}" x2="${round(voidPanel.x + voidPanel.width)}" y2="${round(box.y + box.height)}" stroke="${accent}" stroke-opacity="0.4"/>`,
       text(`${facts.largestGap.days} days dark`, {
         x: mid,
         y: box.y + 30,
@@ -278,63 +283,57 @@ export function renderCard(payload: CardPayload): string {
   parts.push(...geometry.dots.map((dot) => renderDot(dot, accent)));
 
   // Only the anchors this storyline uses get a poetic tail. Labels sit clear of their dot.
-  const lastLabel = payload.labelLast.trim()
-    ? `${payload.labelLast.trim()} ↓`
-    : `last commit · ${formatClock(facts.lastCommitAt)} ↓`;
-  const lastLabelY = lastDot ? Math.max(lastDot.y - 20, box.y + 14) : 0;
+  // Anchor labels ride a rail above the plot and reach their dot with a leader line, so no
+  // label is ever printed into the scatter it is describing. Works the same whether the
+  // commits sit at the top of the clock or the bottom.
+  const railY = box.y - 9;
 
-  if (firstDot) {
-    const tail = payload.labelFirst.trim();
-    const label = `${formatClock(facts.firstCommitAt)} · ${formatDay(facts.firstCommitAt)}${tail ? ` — ${tail}` : ''}`;
-    parts.push(
+  const anchor = (
+    dot: Dot | null,
+    label: string,
+    fill: string,
+    align: 'start' | 'middle' | 'end',
+  ): string => {
+    if (!dot || !label) return '';
+
+    const width = label.length * 6.2;
+
+    return [
+      `<line x1="${round(dot.x)}" y1="${round(railY + 4)}" x2="${round(dot.x)}" y2="${round(dot.y - 8)}" stroke="${fill}" stroke-opacity="0.35" stroke-width="1"/>`,
       text(label, {
-        x: clampX(firstDot.x + 12, label.length * 6, 'start'),
-        y: Math.max(firstDot.y - 18, box.y + 14),
+        x: clampX(dot.x, width, align === 'end' ? 'end' : 'start'),
+        y: railY,
         size: 10,
         family: MONO,
-        fill: '#cbc8bf',
+        fill,
         spacing: 0.4,
-        halo: true,
+        anchor: align,
       }),
-    );
+    ].join('');
+  };
+
+  const firstLabel = (() => {
+    const tail = payload.labelFirst.trim();
+    return `${formatClock(facts.firstCommitAt)} · ${formatDay(facts.firstCommitAt)}${tail ? ` — ${tail}` : ''}`;
+  })();
+
+  const lastLabel = payload.labelLast.trim()
+    ? payload.labelLast.trim()
+    : `last commit · ${formatClock(facts.lastCommitAt)}`;
+
+  parts.push(anchor(firstDot, firstLabel, '#cbc8bf', 'start'));
+
+  // The pivot only gets a rail slot when it is not about to sit on the last commit's.
+  const pivotClear =
+    pivotDot !== null &&
+    payload.labelPivot.trim().length > 0 &&
+    (lastDot === null || Math.abs(pivotDot.x - lastDot.x) > 150);
+
+  if (pivotClear) {
+    parts.push(anchor(pivotDot, payload.labelPivot.trim(), '#cbc8bf', 'middle'));
   }
 
-  if (pivotDot && payload.labelPivot.trim()) {
-    // The pivot and the last commit crowd together on a repo that came back and kept going.
-    // Lift the pivot label clear rather than stacking two lines of 10px type on each other.
-    const crowded = lastDot !== null && Math.abs(pivotDot.x - lastDot.x) < 180;
-    const y = crowded
-      ? Math.min(lastLabelY - 15, pivotDot.y - 20)
-      : Math.max(pivotDot.y - 20, box.y + 14);
-
-    parts.push(
-      text(payload.labelPivot.trim(), {
-        x: pivotDot.x,
-        y: Math.max(y, box.y + 14),
-        size: 10,
-        family: MONO,
-        fill: '#cbc8bf',
-        spacing: 0.4,
-        anchor: 'middle',
-        halo: true,
-      }),
-    );
-  }
-
-  if (lastDot) {
-    parts.push(
-      text(lastLabel, {
-        x: clampX(lastDot.x + 10, lastLabel.length * 6, 'end'),
-        y: lastLabelY,
-        size: 10,
-        family: MONO,
-        fill: accent,
-        spacing: 0.4,
-        anchor: 'end',
-        halo: true,
-      }),
-    );
-  }
+  parts.push(anchor(lastDot, lastLabel, accent, 'end'));
 
   // Foot: the disclosure, the author, the attribution.
   parts.push(

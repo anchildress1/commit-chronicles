@@ -71,13 +71,37 @@ describe('renderCard', () => {
   });
 
   it('prints the plain last-commit anchor when Cortex left the label empty', () => {
-    expect(renderCard(CARD)).toContain('last commit · 3:53 AM ↓');
+    expect(renderCard(CARD)).toContain('last commit · 3:53 AM');
   });
 
   it('uses Cortex’s last-commit label when the repo is still active', () => {
     const svg = renderCard(cardWith({ statusLabel: 'active', labelLast: 'still rewriting' }));
-    expect(svg).toContain('still rewriting ↓');
+    expect(svg).toContain('still rewriting');
     expect(svg).not.toContain('last commit · 3:53 AM');
+  });
+
+  it('keeps every anchor label out of the scatter and on the rail', () => {
+    const svg = renderCard(cardWith({ statusLabel: 'active', labelLast: 'still rewriting' }));
+
+    // The rail sits above the plot; a label printed among the dots would be below it.
+    const railY = [
+      ...svg.matchAll(
+        /<text x="[\d.]+" y="([\d.]+)"[^>]*font-family="'Space Mono[^>]*>(?:last commit|still rewriting)/g,
+      ),
+    ].map((match) => Number(match[1]));
+    const dotYs = [...svg.matchAll(/<circle cx="[\d.]+" cy="([\d.]+)" r="4/g)].map((match) =>
+      Number(match[1]),
+    );
+
+    expect(railY.length).toBeGreaterThan(0);
+    expect(Math.max(...railY)).toBeLessThan(Math.min(...dotYs));
+  });
+
+  it('draws a leader line from each anchor label to the dot it names', () => {
+    const svg = renderCard(CARD);
+    expect(svg).toMatch(
+      /<line x1="[\d.]+" y1="[\d.]+" x2="[\d.]+" y2="[\d.]+" stroke="[^"]+" stroke-opacity="0.35"/,
+    );
   });
 
   it('draws the pivot anchor only when the storyline uses one', () => {

@@ -99,7 +99,9 @@ Snowflake does the work. Cloud Run guards the request, calls one stored procedur
 ```mermaid
 flowchart TD
     accTitle: Commit Chronicles architecture
-    accDescr: The SPA posts to Cloud Run, which enqueues a Cloud Tasks job. The worker calls one Snowflake procedure that ingests from GitHub, detects a storyline in SQL, and narrates it with Cortex. Cloud Run renders the SVG into a public GCS bucket, which serves the card directly.
+    accDescr: The SPA posts to Cloud Run, which claims quota and enqueues a Cloud Tasks job. The worker calls one Snowflake procedure. Inside the warehouse, a Python stored procedure reaches api.github.com through an external access integration to ingest commits; plain SQL views score six storylines and pick one winner; only that winner's evidence is selected and passed to Cortex, whose output is validated in SQL before a JSON card payload is returned. Cloud Run renders that payload to SVG and writes it to a public GCS bucket, which serves the card to READMEs.
+
+    GH[("GitHub<br/>api.github.com")]
 
     SPA["SPA"]
     API["Cloud Run<br/>POST /api/generate"]
@@ -108,27 +110,36 @@ flowchart TD
 
     subgraph SF["Snowflake — CALL READ_REPO"]
         direction TB
-        ING["ingest<br/>external access"]
-        DET["detector<br/>plain SQL, pick ONE"]
-        CTX["Cortex<br/>narrate + pick the accent"]
-        ING --> DET --> CTX
+        EAI["External Access Integration<br/>GITHUB_API_ACCESS"]
+        ING["ingest<br/>INGEST_REPO_COMMITS, cap 500"]
+        DET["detector.sql<br/>gaps, streaks, night hours"]
+        SCORE["storyline scoring<br/>six candidates, one winner"]
+        EV["evidence selection<br/>CARD_EVIDENCE, the winner only"]
+        CTX["Cortex<br/>CHRONICLE_CARD, one AI_COMPLETE"]
+        VAL["validation<br/>hex, labels, kicker, in SQL"]
+        JSON["JSON card payload"]
+
+        EAI --> ING --> DET --> SCORE --> EV --> CTX --> VAL --> JSON
+        SCORE -.->|"storyline none"| JSON
+        VAL -.->|"rejected"| FAIL["failed<br/>cortex_rejected"]
     end
 
-    GH[("api.github.com")]
     REN["Cloud Run<br/>renders the SVG"]
     GCS[("Public GCS bucket<br/>the cache of record")]
-    OUT["README embed"]
+    OUT["SVG<br/>README embed, social preview"]
 
     SPA -->|"repo slug"| API
     API -->|"guard, claim, enqueue"| Q
     Q -->|"survives the tab closing"| W
     W --> SF
-    ING <-.->|"the warehouse gets its own data"| GH
-    SF -->|"card payload"| REN
+    GH <-.->|"the warehouse gets its own data"| EAI
+    JSON --> REN
     REN -->|"only writer"| GCS
     GCS --> OUT
     GCS -->|"GET /api/state"| SPA
 ```
+
+The `none` path is not an error branch — it is the honest answer for a history with no arc, and it skips Cortex entirely.
 
 **The card's existence in the bucket _is_ the ready state.** There is no Firestore, no status column, no separate database. `readState` checks for `card.json`; if it's there, the repo is ready.
 

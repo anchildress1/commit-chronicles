@@ -57,17 +57,7 @@ function Icon({ path }: Readonly<{ path: string }>): JSX.Element {
 export function Footer(): JSX.Element {
   return (
     <footer className="footer">
-      <p className="footer__legal">
-        © 2026 Ashley Childress ·{' '}
-        <a
-          className="footer__legal-link"
-          href="https://github.com/anchildress1/commit-chronicles/blob/main/LICENSE"
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          PolyForm Shield 1.0.0
-        </a>
-      </p>
+      <p className="footer__legal">© 2026 Ashley Childress</p>
 
       <a
         className="footer__powered"

@@ -22,15 +22,10 @@ describe('Footer', () => {
     }
   });
 
-  it('carries the copyright and the licence it is actually under', () => {
+  it('carries the copyright', () => {
     render(<Footer />);
 
-    // Source-available, not MIT. A reader who assumes otherwise assumes wrong.
     expect(screen.getByText(/© 2026 Ashley Childress/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'PolyForm Shield 1.0.0' })).toHaveAttribute(
-      'href',
-      'https://github.com/anchildress1/commit-chronicles/blob/main/LICENSE',
-    );
   });
 
   it('gives every icon-only link an accessible name', () => {

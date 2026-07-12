@@ -207,6 +207,44 @@ describe('start', () => {
   });
 });
 
+describe('rerender', () => {
+  function withStoredCard(): { generator: Generator; store: FakeStore; snowflake: FakeSnowflake } {
+    const store = fakeStore();
+    const snowflake = fakeSnowflake(() => CARD, CARD);
+    const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+    const generator = createGenerator({ store, snowflake, config: config(), queue });
+    return { generator, store, snowflake };
+  }
+
+  it('redraws the card from the words already written for it', async () => {
+    const { generator, store } = withStoredCard();
+
+    await expect(generator.rerender(SLUG)).resolves.toBe(true);
+
+    expect(store.cards.get('atlas/pipeline')?.svg).toContain('<svg');
+    expect(store.cards.get('atlas/pipeline')?.payload.accent).toBe('#e8a04a');
+  });
+
+  it('spends no Cortex call and no quota — the words are already paid for', async () => {
+    const { generator, store, snowflake } = withStoredCard();
+
+    await generator.rerender(SLUG);
+
+    expect(snowflake.calls).toEqual(['fetchCard:atlas/pipeline']);
+    expect(store.quotaUsed).toBe(0);
+  });
+
+  it('reports a repo that has no card to redraw', async () => {
+    const store = fakeStore();
+    const snowflake = fakeSnowflake(() => CARD, null);
+    const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+    const generator = createGenerator({ store, snowflake, config: config(), queue });
+
+    await expect(generator.rerender(SLUG)).resolves.toBe(false);
+    expect(store.cards.size).toBe(0);
+  });
+});
+
 describe('run', () => {
   it('renders the card Snowflake returned and writes it to the bucket', async () => {
     const { generator, store, snowflake } = harness(() => CARD);

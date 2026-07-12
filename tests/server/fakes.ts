@@ -80,6 +80,7 @@ export interface FakeSnowflake extends SnowflakeClient {
 
 export function fakeSnowflake(
   respond: (owner: string, repo: string) => Promise<ReadRepoResult> | ReadRepoResult,
+  stored: CardPayload | null = null,
 ): FakeSnowflake {
   const calls: string[] = [];
   return {
@@ -88,6 +89,11 @@ export function fakeSnowflake(
       calls.push(`${owner}/${repo}`);
       return await respond(owner, repo);
     },
+    fetchCard: (owner, repo) => {
+      calls.push(`fetchCard:${owner}/${repo}`);
+      return Promise.resolve(stored);
+    },
+    listCards: () => Promise.resolve(stored ? [{ owner: 'atlas', repo: 'pipeline' }] : []),
     close: () => Promise.resolve(),
   };
 }

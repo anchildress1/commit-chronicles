@@ -135,6 +135,30 @@ function attributionWidth(): number {
   );
 }
 
+/**
+ * The signature beside the attribution: a six-spoke crystal with a glow behind it.
+ *
+ * The card says who read it once, in words. This says it again in a mark, which is what a
+ * reader remembers and what survives being shrunk into a README.
+ */
+function crystal(cx: number, cy: number, accent: string): string {
+  const r = 5;
+  const spokes = [0, 60, 120]
+    .map((deg) => {
+      const rad = (deg * Math.PI) / 180;
+      const dx = round(Math.cos(rad) * r);
+      const dy = round(Math.sin(rad) * r);
+      return `<line x1="${cx - dx}" y1="${cy - dy}" x2="${cx + dx}" y2="${cy + dy}" stroke="${accent}" stroke-width="1.2" stroke-linecap="round"/>`;
+    })
+    .join('');
+
+  return [
+    `<circle cx="${cx}" cy="${cy}" r="9" fill="url(#glowMark)"/>`,
+    spokes,
+    `<circle cx="${cx}" cy="${cy}" r="1.7" fill="${accent}"/>`,
+  ].join('');
+}
+
 /** Keep an anchor label inside the frame no matter which dot it is pinned to. */
 function clampX(x: number, width: number, anchor: 'start' | 'end'): number {
   if (anchor === 'start') return Math.min(x, CARD.width - 60 - width);
@@ -353,8 +377,8 @@ export function renderCard(payload: CardPayload): string {
       fill: INK,
       anchor: 'end',
     }),
-    // Right-anchored, so the bullet is placed from measured width, not a fixed offset.
-    `<circle cx="${round(CARD.width - 60 - attributionWidth() - 10)}" cy="591" r="3" fill="${accent}"/>`,
+    // Right-anchored, so the mark is placed from measured width, not a fixed offset.
+    crystal(round(CARD.width - 60 - attributionWidth() - 14), 591, accent),
     text('Read by Snowflake Cortex', {
       x: CARD.width - 60,
       y: 595,
@@ -376,6 +400,9 @@ export function renderCard(payload: CardPayload): string {
     '</radialGradient>',
     '<radialGradient id="glow" cx="82%" cy="-8%" r="90%">',
     `<stop offset="0%" stop-color="${accent}" stop-opacity="0.13"/><stop offset="56%" stop-color="${accent}" stop-opacity="0"/>`,
+    '</radialGradient>',
+    `<radialGradient id="glowMark" cx="50%" cy="50%" r="50%">`,
+    `<stop offset="0%" stop-color="${accent}" stop-opacity="0.55"/><stop offset="100%" stop-color="${accent}" stop-opacity="0"/>`,
     '</radialGradient>',
     '<radialGradient id="vignette" cx="50%" cy="40%" r="70%">',
     '<stop offset="58%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity="0.5"/>',

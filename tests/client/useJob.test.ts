@@ -135,7 +135,7 @@ describe('useJob', () => {
     const { result } = renderHook(() => useJob(SLUG));
 
     await waitFor(() => {
-      expect(result.current.error).toMatch(/could not be reached/);
+      expect(result.current.error).toMatch(/could not be read just now/);
     });
   });
 

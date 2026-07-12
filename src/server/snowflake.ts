@@ -1,6 +1,6 @@
 import snowflake from 'snowflake-sdk';
 import type { Config } from './config.js';
-import type { ReadRepoResult } from './card/types.js';
+import type { CardPayload, ReadRepoResult } from './card/types.js';
 
 /**
  * The one call this service makes into the warehouse.
@@ -10,6 +10,17 @@ import type { ReadRepoResult } from './card/types.js';
  */
 export interface SnowflakeClient {
   readRepo(owner: string, repo: string): Promise<ReadRepoResult>;
+  /**
+   * The card this repo already has, read straight back out of CARDS.
+   *
+   * Spends nothing: the words were written and paid for once, so a renderer change never
+   * costs a second Cortex call.
+   *
+   * @returns Null when the repo has no card yet.
+   */
+  fetchCard(owner: string, repo: string): Promise<CardPayload | null>;
+  /** Every repo that already has a card. */
+  listCards(): Promise<{ owner: string; repo: string }[]>;
   close(): Promise<void>;
 }
 
@@ -34,33 +45,60 @@ export function createSnowflakeClient(config: Config): SnowflakeClient {
     { max: 4, min: 0 },
   );
 
+  const query = async (sqlText: string, binds: string[]): Promise<Record<string, unknown>[]> =>
+    new Promise<Record<string, unknown>[]>((resolve, reject) => {
+      void pool.use(
+        async (connection) =>
+          new Promise<void>((settle) => {
+            connection.execute({
+              sqlText,
+              binds,
+              complete: (error, _statement, result) => {
+                if (error) reject(error);
+                else resolve((result ?? []) as Record<string, unknown>[]);
+                settle();
+              },
+            });
+          }),
+      );
+    });
+
+  // The driver hands back VARIANT as a JSON string unless the column is typed.
+  const variant = (value: unknown): unknown =>
+    typeof value === 'string' ? JSON.parse(value) : value;
+
   return {
     async readRepo(owner, repo) {
-      const rows = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
-        void pool.use(
-          async (connection) =>
-            new Promise<void>((settle) => {
-              connection.execute({
-                sqlText: 'CALL READ_REPO(?, ?)',
-                binds: [owner, repo],
-                complete: (error, _statement, result) => {
-                  if (error) reject(error);
-                  else resolve((result ?? []) as Record<string, unknown>[]);
-                  settle();
-                },
-              });
-            }),
-        );
-      });
+      const rows = await query('CALL READ_REPO(?, ?)', [owner, repo]);
 
       const value = rows[0]?.['READ_REPO'];
       if (value === undefined || value === null) {
         throw new Error(`READ_REPO returned no payload for ${owner}/${repo}`);
       }
 
-      // The driver hands back VARIANT as a JSON string unless the column is typed.
-      const parsed: unknown = typeof value === 'string' ? JSON.parse(value) : value;
-      return parsed as ReadRepoResult;
+      return variant(value) as ReadRepoResult;
+    },
+
+    async fetchCard(owner, repo) {
+      const rows = await query(
+        'SELECT PAYLOAD FROM CARD_PAYLOAD WHERE REPO_OWNER = ? AND REPO_NAME = ?',
+        [owner, repo],
+      );
+
+      const value = rows[0]?.['PAYLOAD'];
+      return value === undefined || value === null ? null : (variant(value) as CardPayload);
+    },
+
+    async listCards() {
+      const rows = await query(
+        'SELECT REPO_OWNER, REPO_NAME FROM CARDS ORDER BY REPO_OWNER, REPO_NAME',
+        [],
+      );
+
+      return rows.map((row) => ({
+        owner: String(row['REPO_OWNER']),
+        repo: String(row['REPO_NAME']),
+      }));
     },
 
     async close() {

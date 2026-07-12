@@ -13,7 +13,6 @@ export function Nav({ onHome }: NavProps): JSX.Element {
         </span>
         <span className="brand__word">Commit Chronicles</span>
       </button>
-      <span className="nav__meta">Read by Snowflake Cortex</span>
     </nav>
   );
 }

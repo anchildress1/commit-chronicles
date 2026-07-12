@@ -26,7 +26,7 @@ function describe(cause: unknown): string {
   if (cause instanceof QuotaExceededError) {
     return "Today's generation budget is spent. Cards already made still load — try again tomorrow.";
   }
-  return 'Snowflake could not be reached. Try again in a moment.';
+  return 'That could not be read just now. Try again in a moment.';
 }
 
 const settled = (state: JobState): boolean => state.status === 'ready' || state.status === 'failed';

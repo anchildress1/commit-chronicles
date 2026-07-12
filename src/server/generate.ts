@@ -24,6 +24,15 @@ export interface Generator {
   start(slug: RepoSlug): Promise<StartOutcome>;
   /** Run the pipeline. Only the queue worker calls this; it spends the Cortex call. */
   run(slug: RepoSlug): Promise<void>;
+  /**
+   * Redraw an existing card from the words already written for it.
+   *
+   * Spends no Cortex call and no quota, so a renderer change can be rolled across every
+   * card for free.
+   *
+   * @returns False when the repo has no card to redraw.
+   */
+  rerender(slug: RepoSlug): Promise<boolean>;
 }
 
 export type Log = (message: string, detail?: Record<string, unknown>) => void;
@@ -125,5 +134,14 @@ export function createGenerator(deps: GeneratorDeps): Generator {
     },
 
     run: (slug) => runGeneration(deps, slug),
+
+    async rerender(slug) {
+      const card = await deps.snowflake.fetchCard(slug.owner, slug.repo);
+      if (!card) return false;
+
+      await store.writeCard(slug.owner, slug.repo, renderCard(card), card);
+      log('card redrawn', { repo: slug.slug, pipelineVersion: card.pipelineVersion });
+      return true;
+    },
   };
 }

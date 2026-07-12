@@ -23,8 +23,8 @@ export function Landing({ onSubmit }: LandingProps): JSX.Element {
       </h1>
 
       <p className="lede" data-anim style={{ animationDelay: '0.16s' }}>
-        Paste a GitHub repository. <strong>Snowflake Cortex</strong> reads its commit history and
-        turns it into a card you can drop straight into your README.
+        Paste a GitHub repository. It reads the whole commit history, finds the one story actually
+        in there, and turns it into a card you can drop straight into your README.
       </p>
 
       <div className="entry" data-anim style={{ animationDelay: '0.24s' }}>

@@ -44,8 +44,6 @@ export function Result({ slug, onHome }: ResultProps): JSX.Element {
         <img src={cardUrl(slug)} alt={`Commit Chronicles card for ${slug.slug}`} />
       </div>
 
-      <p className="card-note">1200 × 630 · social + README preview size</p>
-
       <div className="takeaway">
         <div className="takeaway__buttons">
           <button

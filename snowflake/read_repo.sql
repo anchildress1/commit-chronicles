@@ -44,6 +44,38 @@ BEGIN
 END;
 $$;
 
+-- The card a repo already has, in the same shape READ_REPO returns. A renderer change
+-- should never cost a Cortex call: the words are already written and paid for.
+CREATE OR REPLACE VIEW CARD_PAYLOAD AS
+SELECT
+    REPO_OWNER,
+    REPO_NAME,
+    OBJECT_CONSTRUCT(
+        'status',          'ready',
+        'repo',            REPO_OWNER || '/' || REPO_NAME,
+        'storyline',       STORYLINE,
+        'score',           SCORE,
+        'statusLabel',     STATUS,
+        'kicker',          KICKER,
+        'headlineUpright', HEADLINE_UPRIGHT,
+        'headlineAccent',  HEADLINE_ACCENT,
+        'headlineTrail',   HEADLINE_TRAIL,
+        'labelFirst',      LABEL_FIRST,
+        'labelPivot',      LABEL_PIVOT,
+        'labelLast',       LABEL_LAST,
+        'accent',          ACCENT,
+        'accentReason',    ACCENT_REASON,
+        'pivotAt',         TO_VARCHAR(PIVOT_AT),
+        'facts',           FACTS,
+        'evidence',        EVIDENCE,
+        'plot',            PLOT,
+        'model',           MODEL,
+        'cortexQueryId',   CORTEX_QUERY_ID,
+        'pipelineVersion', PIPELINE_VERSION,
+        'generatedAt',     TO_VARCHAR(GENERATED_AT)
+    ) AS PAYLOAD
+FROM CARDS;
+
 CREATE OR REPLACE PROCEDURE READ_REPO(P_OWNER STRING, P_REPO STRING)
 RETURNS VARIANT
 LANGUAGE SQL

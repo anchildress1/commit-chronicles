@@ -191,6 +191,36 @@ describe('POST /internal/generate', () => {
   });
 });
 
+describe('POST /internal/rerender', () => {
+  const AUTH = { authorization: 'Bearer good-token' };
+
+  it('redraws a stored card without a model call', async () => {
+    const store = fakeStore();
+    const snowflake = fakeSnowflake(() => CARD, CARD);
+    const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+    const generator = createGenerator({ store, snowflake, config: CONFIG, queue });
+    const app = createApp({ store, generator, taskAuth: fakeTaskAuth(true) });
+
+    const response = await post(app, '/internal/rerender', { repo: 'atlas/pipeline' }, AUTH);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: 'redrawn' });
+    expect(store.quotaUsed).toBe(0);
+    expect(snowflake.calls).toEqual(['fetchCard:atlas/pipeline']);
+  });
+
+  it('refuses an unsigned request', async () => {
+    const { app } = harness();
+    expect((await post(app, '/internal/rerender', { repo: 'atlas/pipeline' })).status).toBe(403);
+  });
+
+  it('404s a repo that has no card yet', async () => {
+    const { app } = harness();
+    const response = await post(app, '/internal/rerender', { repo: 'atlas/pipeline' }, AUTH);
+    expect(response.status).toBe(404);
+  });
+});
+
 describe('GET /api/state/:owner/:repo', () => {
   it('reports unknown for a repo nobody has read', async () => {
     const { app } = harness();

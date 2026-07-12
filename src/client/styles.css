@@ -410,15 +410,6 @@ body {
   height: 100%;
 }
 
-.card-note {
-  margin-top: 14px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  color: var(--faint);
-  text-align: center;
-}
-
 .btn-block {
   border-radius: 10px;
   padding: 15px;

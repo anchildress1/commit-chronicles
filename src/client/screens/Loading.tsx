@@ -39,7 +39,7 @@ export function Loading({ slug }: LoadingProps): JSX.Element {
         github.com/<b>{slug.slug}</b>
       </p>
 
-      <h2 className="display display--sub">Snowflake Cortex is reading the history</h2>
+      <h2 className="display display--sub">Cortex is reading the history</h2>
 
       <div className="scan" aria-hidden="true">
         <span className="scan__beam" />
@@ -59,9 +59,7 @@ export function Loading({ slug }: LoadingProps): JSX.Element {
         </span>
       </p>
 
-      <p className="fineprint">
-        one Snowflake pass over the commit log · leave the tab, it keeps going
-      </p>
+      <p className="fineprint">one pass over the commit log · leave the tab, it keeps going</p>
     </main>
   );
 }

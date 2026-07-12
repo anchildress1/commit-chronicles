@@ -71,6 +71,25 @@ export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): 
     return c.json({ ok: true });
   });
 
+  // Redraw an existing card. Authenticated like the worker, but it spends nothing: the
+  // words come back out of CARDS, and only the SVG is rebuilt.
+  app.post('/internal/rerender', async (c) => {
+    if (!taskAuth || !(await taskAuth.verify(c.req.header('authorization')))) {
+      return c.json({ error: 'unauthorized' }, 403);
+    }
+
+    let slug;
+    try {
+      const body: { repo?: unknown } = await c.req.json();
+      slug = parseSlug(typeof body.repo === 'string' ? body.repo : '');
+    } catch {
+      return c.json({ error: 'invalid_repo' }, 400);
+    }
+
+    const redrawn = await generator.rerender(slug);
+    return redrawn ? c.json({ status: 'redrawn', repo: slug.slug }) : c.notFound();
+  });
+
   app.get('/api/state/:owner/:repo', async (c) => {
     let slug;
     try {

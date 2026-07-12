@@ -9,6 +9,11 @@ const ADVANCE = {
 
 export type Face = keyof typeof ADVANCE;
 
+/**
+ * Estimated rendered width of `text`, in pixels.
+ *
+ * @param face Selects the average glyph advance; the card is never measured in a browser.
+ */
 export function measure(text: string, fontSize: number, face: Face): number {
   return text.length * ADVANCE[face] * fontSize;
 }
@@ -156,7 +161,15 @@ export function wrapHeadline(
   return { lines: wrapAt(words, fontSize, maxWidth), fontSize };
 }
 
-/** Largest size at which a single line of `face` fits `maxWidth`. Never truncates. */
+/**
+ * Largest size from `sizes` at which `text` fits `maxWidth` on one line.
+ *
+ * Falls back to the smallest size rather than truncating, so nothing is ever cut.
+ *
+ * @param sizes Candidate font sizes, largest first.
+ * @param letterSpacing Extra tracking per gap, added to the measured width.
+ * @returns A font size in pixels.
+ */
 export function fitOneLine(
   text: string,
   face: Face,

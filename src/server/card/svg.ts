@@ -131,7 +131,12 @@ function clampX(x: number, width: number, anchor: 'start' | 'end'): number {
   return Math.max(x, 60 + width);
 }
 
-/** Render the card. Constants, Snowflake's facts, and Cortex's words — nothing invented. */
+/**
+ * Render the 1200×630 card as an SVG string.
+ *
+ * Every value on it is a constant, a fact Snowflake computed, or a phrase Cortex wrote —
+ * the renderer invents nothing.
+ */
 export function renderCard(payload: CardPayload): string {
   const accent = safeAccent(payload.accent);
   const facts = payload.facts;
@@ -367,7 +372,11 @@ export function renderCard(payload: CardPayload): string {
   ].join('');
 }
 
-/** The card is an image in a README; a screen reader still has to get the story. */
+/**
+ * The card's story as a sentence, for the SVG's `aria-label`.
+ *
+ * The card ships as an image in someone's README, and a screen reader still has to get it.
+ */
 export function cardAltText(payload: CardPayload): string {
   const headline = [payload.headlineUpright, payload.headlineAccent, payload.headlineTrail]
     .join(' ')

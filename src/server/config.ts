@@ -62,6 +62,11 @@ function loadTasks(): TasksConfig | null {
   };
 }
 
+/**
+ * Read configuration from the environment.
+ *
+ * @throws {Error} On a missing required variable, or a malformed numeric one.
+ */
 export function loadConfig(): Config {
   return {
     port: int('PORT', 8080),

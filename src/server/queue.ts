@@ -15,6 +15,11 @@ export interface TaskAuthenticator {
   verify(authorizationHeader: string | undefined): Promise<boolean>;
 }
 
+/**
+ * A queue backed by Cloud Tasks, which calls the worker back with an OIDC token.
+ *
+ * @throws {Error} When Cloud Tasks is not configured.
+ */
 export function createCloudTasksQueue(config: Config): TaskQueue {
   const tasks = config.tasks;
   if (!tasks) {
@@ -46,6 +51,11 @@ export function createCloudTasksQueue(config: Config): TaskQueue {
   };
 }
 
+/**
+ * Verifies the OIDC token on a worker request against the invoker service account.
+ *
+ * @returns An authenticator that refuses everything when no queue is configured.
+ */
 export function createTaskAuthenticator(config: Config): TaskAuthenticator {
   const tasks = config.tasks;
   const client = new OAuth2Client();
@@ -71,7 +81,11 @@ export function createTaskAuthenticator(config: Config): TaskAuthenticator {
   };
 }
 
-/** Local dev only: no queue exists on a laptop. Production always goes through Cloud Tasks. */
+/**
+ * A queue that just runs the job in-process, for a laptop with no Cloud Tasks.
+ *
+ * Production always goes through the real queue, so work survives the browser tab.
+ */
 export function createInlineQueue(run: (slug: RepoSlug) => Promise<void>): TaskQueue {
   return {
     enqueue(slug) {

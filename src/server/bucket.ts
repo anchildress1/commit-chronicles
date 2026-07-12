@@ -11,12 +11,21 @@ export type JobState =
   | { status: 'unknown'; repo: string };
 
 export interface CardStore {
+  /** The repo's state, decided by which objects exist. Never throws for a repo not found. */
   readState(owner: string, repo: string): Promise<JobState>;
+  /** The rendered card, or null when there is none. */
   readCardSvg(owner: string, repo: string): Promise<string | null>;
+  /** Claim the repo, so a second click cannot pay for a second Cortex call. */
   markGenerating(owner: string, repo: string): Promise<void>;
+  /** Cache a failure, so a bad slug cannot be retried into a bill. */
   markFailed(owner: string, repo: string, errorCode: string, reasons?: string[]): Promise<void>;
+  /** Publish the card and clear the generating marker. The SVG lands before the payload. */
   writeCard(owner: string, repo: string, svg: string, payload: CardPayload): Promise<void>;
-  /** Atomically claim one slot from today's generation budget. False when the cap is hit. */
+  /**
+   * Atomically claim one slot from today's generation budget.
+   *
+   * @returns False when the cap is spent, and when the counter is too contended to claim.
+   */
   claimDailyQuota(cap: number, today: string): Promise<boolean>;
 }
 
@@ -26,6 +35,11 @@ interface QuotaFile {
   count: number;
 }
 
+/**
+ * The bucket-backed card store.
+ *
+ * @param storage Injectable for tests; defaults to application-default credentials.
+ */
 export function createCardStore(bucketName: string, storage = new Storage()): CardStore {
   const bucket = storage.bucket(bucketName);
 

@@ -31,7 +31,12 @@ function describe(cause: unknown): string {
 
 const settled = (state: JobState): boolean => state.status === 'ready' || state.status === 'failed';
 
-/** Attach to the job for `slug`. Reads state first: returning to a page never re-runs Cortex. */
+/**
+ * Attach to the job for `slug`, generating one only when the bucket has nothing.
+ *
+ * Reading the state first means returning to a page never re-runs Cortex, and a repo
+ * someone else already read costs nothing to show.
+ */
 export function useJob(slug: RepoSlug | null): Job {
   const [tracked, setTracked] = useState<Tracked>(EMPTY);
   /** Bumped by retry(). Re-runs the effect for a slug the hook is already attached to. */

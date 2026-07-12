@@ -14,7 +14,11 @@ export interface AppDeps {
   clientRoot?: string;
 }
 
-/** Routes. The serving path reads the bucket only — a cached page costs nothing. */
+/**
+ * The HTTP surface: generation, job state, the card, the queue worker, and the SPA.
+ *
+ * The serving path reads the bucket and nothing else, so a cached page costs nothing.
+ */
 export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): Hono {
   const app = new Hono();
 

@@ -18,9 +18,11 @@ export class QuotaExceededError extends Error {
 }
 
 /**
- * Ask for a generation. The response is the job's state, not the card: generation is
- * durable and outlives this tab, so the page attaches to it by polling rather than
- * holding a request open.
+ * Ask for a generation.
+ *
+ * @returns The job's state, not the card: generation outlives this tab, so the page
+ *   attaches by polling rather than by holding a request open.
+ * @throws {QuotaExceededError} When the day's budget is spent.
  */
 export async function requestGeneration(slug: RepoSlug): Promise<JobState> {
   const response = await fetch('/api/generate', {
@@ -35,6 +37,11 @@ export async function requestGeneration(slug: RepoSlug): Promise<JobState> {
   return (await response.json()) as JobState;
 }
 
+/**
+ * Read the current state of a repo's job.
+ *
+ * @throws {Error} When the endpoint answers with anything but 200.
+ */
 export async function fetchState(slug: RepoSlug): Promise<JobState> {
   const response = await fetch(`/api/state/${slug.owner}/${slug.repo}`);
   if (!response.ok) throw new Error(`state failed: ${response.status}`);
@@ -45,6 +52,7 @@ export function cardUrl(slug: RepoSlug): string {
   return `/${slug.owner}/${slug.repo}/card.svg`;
 }
 
+/** The README embed: an image of the card, linking back to the repo's page. */
 export function embedMarkdown(slug: RepoSlug, origin: string): string {
   const page = `${origin}/${slug.slug}`;
   return `[![Commit Chronicle](${page}/card.svg)](${page})`;

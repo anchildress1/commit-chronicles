@@ -2,7 +2,11 @@ import type { RepoStatus } from './types.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** `Date` cannot parse Snowflake's TIMESTAMP_TZ, so rebuild it into ISO-8601 rather than hope. */
+/**
+ * Parse Snowflake's `TIMESTAMP_TZ` rendering, which `Date` will not accept as-is.
+ *
+ * @throws {Error} When the value is not a timestamp in any recognised form.
+ */
 export function parseSnowflakeTimestamp(value: string): Date {
   const match =
     /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.\d+)?\s*([+-]\d{2}):?(\d{2})?$/.exec(
@@ -46,7 +50,11 @@ function fieldsInOriginalZone(value: string): {
   };
 }
 
-/** `3:53 AM`. The exact minute is the point. */
+/**
+ * The commit's time as `3:53 AM`, read against its own UTC offset.
+ *
+ * The exact minute is the point, and the server's local zone must never move it.
+ */
 export function formatClock(value: string): string {
   const { hour, minute } = fieldsInOriginalZone(value);
   const meridiem = hour < 12 ? 'AM' : 'PM';
@@ -66,7 +74,11 @@ const STATUS_VERB: Record<RepoStatus, string> = {
   active: 'last touched',
 };
 
-/** `59 commits · quiet since Feb 25` — the header meta line. Facts only. */
+/**
+ * The header meta line, e.g. `59 commits · quiet since Feb 25`.
+ *
+ * Composed from facts alone — Cortex has no say in it.
+ */
 export function headerMeta(commitCount: number, status: RepoStatus, lastCommitAt: string): string {
   const plural = commitCount === 1 ? 'commit' : 'commits';
   return `${commitCount} ${plural} · ${STATUS_VERB[status]} ${formatDay(lastCommitAt)}`;
@@ -88,7 +100,12 @@ export function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
-/** The card is public; verify the hex even though the schema constrains it. */
+/**
+ * Cortex's accent, or `fallback` when it is not a `#rrggbb` colour.
+ *
+ * The card is public and the hex reaches the SVG, so it is verified even though the
+ * response schema already constrains it.
+ */
 export function safeAccent(accent: string, fallback = '#6b7280'): string {
   return /^#[0-9a-fA-F]{6}$/.test(accent) ? accent.toLowerCase() : fallback;
 }

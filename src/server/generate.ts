@@ -16,9 +16,13 @@ export type StartOutcome =
     };
 
 export interface Generator {
-  /** Admit a repo and hand it to the queue. Cheap, and safe to call twice. */
+  /**
+   * Admit a repo and hand it to the queue. Cheap, and safe to call twice.
+   *
+   * @returns Whether the job was accepted, and the state the caller should show either way.
+   */
   start(slug: RepoSlug): Promise<StartOutcome>;
-  /** The pipeline itself. Only the queue worker calls this. */
+  /** Run the pipeline. Only the queue worker calls this; it spends the Cortex call. */
   run(slug: RepoSlug): Promise<void>;
 }
 
@@ -36,7 +40,12 @@ export interface GeneratorDeps extends PipelineDeps {
   now?: () => Date;
 }
 
-/** The pipeline. Standalone: the queue runs it, and the generator holds the queue. */
+/**
+ * Read the repo, render its card, and write it to the bucket.
+ *
+ * Never throws: a failure is recorded as a cached failed state instead. Stands alone
+ * because the queue runs it and the generator holds the queue.
+ */
 export async function runGeneration(
   { store, snowflake, log = () => undefined }: PipelineDeps,
   slug: RepoSlug,
@@ -69,6 +78,9 @@ function today(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * The admission rules around the pipeline: cache, in-flight, retryability, and daily cap.
+ */
 export function createGenerator(deps: GeneratorDeps): Generator {
   const { store, config, queue, now = () => new Date(), log = () => undefined } = deps;
 

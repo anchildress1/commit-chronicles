@@ -19,6 +19,12 @@ export const PLOT_BOTTOM = 508;
 /** Below this the scatter is a smear, so the headline gives ground instead. */
 export const PLOT_MIN_HEIGHT = 150;
 
+/**
+ * The scatter's box, starting below wherever the headline ended.
+ *
+ * @param headlineBottom Y coordinate the headline block ran to.
+ * @returns A box clamped to {@link PLOT_MIN_HEIGHT}, always ending at {@link PLOT_BOTTOM}.
+ */
 export function plotBox(headlineBottom: number): PlotBox {
   const top = Math.min(headlineBottom + 26, PLOT_BOTTOM - PLOT_MIN_HEIGHT);
   return { x: PLOT_X, y: top, width: PLOT_WIDTH, height: PLOT_BOTTOM - top };
@@ -30,6 +36,9 @@ export function hourToY(hourFraction: number, box: PlotBox): number {
   return box.y + (0.06 + (rotated / 24) * 0.88) * box.height;
 }
 
+/**
+ * Place an instant along the x-axis. A repo whose commits share one instant centres.
+ */
 export function timeToX(ms: number, startMs: number, endMs: number, box: PlotBox): number {
   const span = endMs - startMs;
   const fraction = span <= 0 ? 0.5 : (ms - startMs) / span;
@@ -55,7 +64,14 @@ export interface PlotGeometry {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** Place every commit. `m` matters: the card annotates exact times, not whole hours. */
+/**
+ * Lay out every commit, plus the axis ticks.
+ *
+ * Rows are sorted here, and `m` is honoured because the card annotates exact times rather
+ * than whole hours.
+ *
+ * @param plot Snowflake's `PLOT` array, in any order.
+ */
 export function buildPlot(plot: PlotPoint[], box: PlotBox): PlotGeometry {
   const points = plot
     .map((p) => ({ ...p, ms: parseSnowflakeTimestamp(p.t).getTime() }))
@@ -132,6 +148,13 @@ export interface VoidPanel {
 /** Short silences are just gaps between dots. A void panel is a claim, so it has a floor. */
 export const VOID_MIN_DAYS = 14;
 
+/**
+ * The panel drawn over the repo's longest silence.
+ *
+ * @param gap `FACTS.largestGap`, or null when the history has no gap at all.
+ * @returns Null when the silence is shorter than {@link VOID_MIN_DAYS} or would render
+ *   thinner than its own label.
+ */
 export function buildVoidPanel(
   gap: { days: number; from: string; to: string } | null,
   startMs: number,
@@ -150,7 +173,11 @@ export function buildVoidPanel(
   return { x: fromX, width };
 }
 
-/** Find the dot a named timestamp rides, by exact string match against `plot[].t`. */
+/**
+ * Find the dot an anchor rides, by exact string match against `plot[].t`.
+ *
+ * @returns Null for a null anchor, and for a timestamp that matches no commit.
+ */
 export function findDot(dots: Dot[], timestamp: string | null): Dot | null {
   if (!timestamp) return null;
   return dots.find((dot) => dot.t === timestamp) ?? null;

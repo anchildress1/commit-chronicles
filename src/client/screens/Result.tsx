@@ -14,6 +14,35 @@ interface ResultProps {
 
 type CopyState = 'idle' | 'copied' | 'refused';
 
+/**
+ * The pre-secure-context way to copy. Deprecated, and the only thing that works over plain
+ * HTTP — which is the exact case the Clipboard API leaves with nothing.
+ *
+ * @returns Whether the text reached the clipboard.
+ */
+function legacyCopy(value: string): boolean {
+  const field = document.createElement('textarea');
+  field.value = value;
+  // Off-screen rather than hidden: the selection has to be real for the copy to take.
+  field.setAttribute('readonly', '');
+  field.style.position = 'fixed';
+  field.style.opacity = '0';
+  field.style.pointerEvents = 'none';
+  document.body.appendChild(field);
+
+  try {
+    field.select();
+    // Deprecated, and still the only clipboard write available outside a secure context.
+    // The modern API is tried first and this only runs when it is absent or refuses.
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    field.remove();
+  }
+}
+
 function useCopy(): [CopyState, (value: string) => void] {
   const [state, setState] = useState<CopyState>('idle');
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -28,14 +57,28 @@ function useCopy(): [CopyState, (value: string) => void] {
   );
 
   const copy = (value: string): void => {
+    // navigator.clipboard exists only in a secure context, so it is simply absent when the
+    // page is served over plain HTTP — reaching the dev server on a LAN address to test a
+    // phone, for one. Calling through it then throws synchronously and never rejects, which
+    // is how the 'refused' state below became unreachable in the one case that needs it.
+    // lib.dom types `clipboard` as always present. It is not, and believing the type is what
+    // left the button doing nothing at all over HTTP. Partial<> restores the truth so the
+    // check below is a real one rather than dead code the linter is right to flag.
+    const { clipboard } = navigator as Partial<Navigator>;
+
+    if (!clipboard?.writeText) {
+      settle(legacyCopy(value) ? 'copied' : 'refused');
+      return;
+    }
+
     // Claimed only once the write resolves. A browser that refuses the clipboard must not be
     // answered with a tick, or the reader pastes the last thing they copied somewhere else.
-    void navigator.clipboard.writeText(value).then(
+    void clipboard.writeText(value).then(
       () => {
         settle('copied');
       },
       () => {
-        settle('refused');
+        settle(legacyCopy(value) ? 'copied' : 'refused');
       },
     );
   };

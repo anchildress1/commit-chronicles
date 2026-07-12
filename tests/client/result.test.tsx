@@ -8,7 +8,7 @@ import { Result } from '../../src/client/screens/Result.js';
 import { parseSlug } from '../../src/shared/slug.js';
 
 const SLUG = parseSlug('atlas/pipeline');
-const CARD = 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg';
+const CARD = 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.png';
 const PAGE = 'https://commitchronicles.dev/atlas/pipeline';
 
 /** Swap the clipboard for one that answers however the test needs it to. */

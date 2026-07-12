@@ -69,7 +69,7 @@ for the full product spec and `docs/build-plan.md` for the delivery order.
   repo. It emits an ordinary UDF around `AI_COMPLETE` anyway, so we write that ourselves.
 
 - **Backend**: Cloud Run — `/api/generate`, plus serving `/{owner}/{repo}` and
-  `/{owner}/{repo}/card.svg`. It renders the SVG from Snowflake's card payload and
+  `/{owner}/{repo}/card.png`. It renders the SVG from Snowflake's card payload and
   writes it to the bucket. It computes no analysis of its own.
 - **Cache of record**: a public GCS bucket. The card's existence in the bucket _is_
   the ready state.

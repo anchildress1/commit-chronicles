@@ -18,7 +18,7 @@ Scope is **one repository**, not a whole profile. A profile year-in-review turns
 
 - A repo entry flow for public GitHub repos (`owner/repo` or a URL).
 - A durable generation state: `generating`, `ready`, `failed`.
-- A generated SVG card sized for README and social previews.
+- A generated PNG card sized for README and social previews. **PNG, not SVG**: dev.to proxies remote images and will not serve an SVG, so an SVG-only card does not exist on the platform this was built for. The renderer still composes SVG; it is rasterized before it leaves the service.
 - A copyable Markdown embed.
 - A cached public page at `/{owner}/{repo}` and a card served directly from the public GCS bucket.
 - Three pre-generated example repos on the landing page, for judge-safe demo coverage. Two carry a storyline; `forem/forem` deliberately carries none — the honest-negative case is part of the demo, not an omission from it.
@@ -111,7 +111,7 @@ stateDiagram-v2
 
     [*] --> unknown: no objects in the bucket
     unknown --> generating: quota claimed, create-only marker written
-    generating --> ready: card.svg then card.json written, state cleared
+    generating --> ready: card.png then card.json written, state cleared
     generating --> failed: state.json records the error code
     generating --> generating: marker past its TTL, presumed dead, re-admitted
     failed --> generating: retryable code only
@@ -131,7 +131,7 @@ stateDiagram-v2
 - Primary action: **Copy image URL**.
 - Secondary action: **Copy README embed**.
   ```md
-  [![Commit Chronicles](https://storage.googleapis.com/commit-chronicles-cards/cards/{owner}/{repo}/card.svg)](https://commitchronicles.anchildress1.dev/{owner}/{repo})
+  [![Commit Chronicles](https://storage.googleapis.com/commit-chronicles-cards/cards/{owner}/{repo}/card.png)](https://commitchronicles.anchildress1.dev/{owner}/{repo})
   ```
 - Link to read another repo.
 
@@ -207,12 +207,12 @@ There is deliberately **no card route**. The bucket is public and serves the SVG
 
 | Object                            | Cache-Control          | Job                                                  |
 | --------------------------------- | ---------------------- | ---------------------------------------------------- |
-| `cards/{owner}/{repo}/card.svg`   | `public, max-age=3600` | The product                                          |
+| `cards/{owner}/{repo}/card.png`   | `public, max-age=3600` | The product                                          |
 | `cards/{owner}/{repo}/card.json`  | `public, max-age=300`  | The payload. **Its existence is the ready state.**   |
 | `cards/{owner}/{repo}/state.json` | `no-store`             | `generating` or `failed`. Deleted on success.        |
 | `meta/quota/{YYYY-MM-DD}.json`    | `no-store`             | The daily counter, so the cap holds across instances |
 
-Writes are ordered `card.svg` → `card.json` → clear `state.json`. A crash between the first two leaves the repo retryable rather than ready-with-no-card.
+Writes are ordered `card.png` → `card.json` → clear `state.json`. A crash between the first two leaves the repo retryable rather than ready-with-no-card.
 
 ## Snowflake objects
 
@@ -408,7 +408,7 @@ Deliberately absent:
 
 ## Known caveats
 
-1. GitHub proxies README images through camo, so webfonts will not load in the card. Fonts must be base64-embedded as a subset; today the card falls back through a serif stack. **Open.**
+1. ~~GitHub proxies README images through camo, so webfonts will not load in the card.~~ **Closed.** The card ships as a PNG with the fonts vendored and loaded explicitly at rasterize time, so the type is baked into the pixels and no proxy has to fetch a font for the card to read correctly.
 2. The beeswarm offsets commits horizontally to avoid overplotting. The hour is exact; the day is accurate to within the cluster width. Disclosed in the caption.
 3. A quiet or merge-heavy repo may have no story. Said plainly — sparse repos get the `none` template card, not forced Cortex prose.
 4. Generation takes tens of seconds. Acceptable, because the result is durable and revisit-safe.
@@ -417,4 +417,4 @@ Deliberately absent:
 
 ## Labels
 
-Project **Commit Chronicles** · repo `commit-chronicles` · route `/{owner}/{repo}` · card object `https://storage.googleapis.com/commit-chronicles-cards/cards/{owner}/{repo}/card.svg` · state endpoint `/api/state/{owner}/{repo}` · generation endpoint `/api/generate`.
+Project **Commit Chronicles** · repo `commit-chronicles` · route `/{owner}/{repo}` · card object `https://storage.googleapis.com/commit-chronicles-cards/cards/{owner}/{repo}/card.png` · state endpoint `/api/state/{owner}/{repo}` · generation endpoint `/api/generate`.

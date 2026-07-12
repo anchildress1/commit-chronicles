@@ -6,14 +6,14 @@ import type { RepoSlug } from '../../src/shared/slug.js';
 
 /** An in-memory stand-in for the bucket, with the same semantics the real store has. */
 export interface FakeStore extends CardStore {
-  cards: Map<string, { svg: string; payload: CardPayload }>;
+  cards: Map<string, { png: Buffer; payload: CardPayload }>;
   states: Map<string, JobState>;
   quotaUsed: number;
   writes: string[];
 }
 
 export function fakeStore(): FakeStore {
-  const cards = new Map<string, { svg: string; payload: CardPayload }>();
+  const cards = new Map<string, { png: Buffer; payload: CardPayload }>();
   const states = new Map<string, JobState>();
   const writes: string[] = [];
   const key = (owner: string, repo: string): string => `${owner}/${repo}`;
@@ -31,7 +31,7 @@ export function fakeStore(): FakeStore {
           status: 'ready',
           repo: key(owner, repo),
           accent: card.payload.accent,
-          cardUrl: `https://storage.googleapis.com/test-bucket/cards/${owner}/${repo}/card.svg`,
+          cardUrl: `https://storage.googleapis.com/test-bucket/cards/${owner}/${repo}/card.png`,
         });
       }
       return Promise.resolve(
@@ -71,9 +71,9 @@ export function fakeStore(): FakeStore {
       return Promise.resolve();
     },
 
-    writeCard: (owner, repo, svg, payload) => {
+    writeCard: (owner, repo, png, payload) => {
       writes.push(`card:${key(owner, repo)}`);
-      cards.set(key(owner, repo), { svg, payload });
+      cards.set(key(owner, repo), { png, payload });
       states.delete(key(owner, repo));
       return Promise.resolve();
     },

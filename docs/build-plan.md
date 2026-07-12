@@ -38,7 +38,7 @@ No `STORAGE INTEGRATION` and no external stage — Cloud Run owns the bucket.
 
 ## Open items
 
-- **Font rendering** — GitHub proxies README images through camo, so webfonts won't load. Fix is a base64-embedded subset. **Deferred by decision**; the card falls back through a serif stack.
+- ~~**Font rendering**~~ **Closed.** The card is rasterized to PNG with the fonts vendored, so nothing depends on a proxy fetching a webfont. dev.to forced this — its image proxy will not serve an SVG.
 - **Stale cards** — `STALE_CARDS` reports which cards a dead pipeline version wrote; it does not act, because acting costs a Cortex call each. `make cards-rerender` redraws stored cards for free — only a prompt change needs real spend.
 
 ## Cut

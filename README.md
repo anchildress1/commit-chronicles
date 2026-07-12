@@ -18,13 +18,13 @@ Paste a public GitHub repo. **Snowflake fetches its own commit history, finds th
 
 Two real repos, two storylines the detector found unaided — a **binge** and a **nocturne**. Every dot, timestamp, and quoted commit is real:
 
-[![save-the-sun](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/save-the-sun/card.svg)](https://commitchronicles.anchildress1.dev/anchildress1/save-the-sun)
+[![save-the-sun](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/save-the-sun/card.png)](https://commitchronicles.anchildress1.dev/anchildress1/save-the-sun)
 
-[![carbon-trace](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/carbon-trace/card.svg)](https://commitchronicles.anchildress1.dev/anchildress1/carbon-trace)
+[![carbon-trace](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/carbon-trace/card.png)](https://commitchronicles.anchildress1.dev/anchildress1/carbon-trace)
 
 And a third, which is the one that proves the other two. `forem/forem` has 463 commits and **no story** — a team repo with continuous CI has no personal arc to find. It says so, in grey, and Cortex is never called:
 
-[![forem/forem](https://storage.googleapis.com/commit-chronicles-cards/cards/forem/forem/card.svg)](https://commitchronicles.anchildress1.dev/forem/forem)
+[![forem/forem](https://storage.googleapis.com/commit-chronicles-cards/cards/forem/forem/card.png)](https://commitchronicles.anchildress1.dev/forem/forem)
 
 A product that cannot return nothing will invent something. This one returns nothing.
 
@@ -173,7 +173,7 @@ sequenceDiagram
     S-->>R: card payload
 
     R->>R: render SVG
-    R->>B: card.svg, then card.json, then clear state
+    R->>B: card.png, then card.json, then clear state
     Note over R,B: card.json last: a crash leaves it<br/>retryable, never ready-with-no-card
 
     loop every 2.5s
@@ -305,7 +305,7 @@ src/
   server/
     app.ts            #   routes
     generate.ts       #   claim → enqueue → run → render → write
-    bucket.ts         #   GCS: card.svg, card.json, state.json, quota counters
+    bucket.ts         #   GCS: card.png, card.json, state.json, quota counters
     queue.ts          #   Cloud Tasks + OIDC verification (inline fallback for laptops)
     snowflake.ts      #   the driver wrapper
     rerender.ts       #   CLI: redraw stored cards, no Cortex spend

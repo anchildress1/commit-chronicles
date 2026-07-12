@@ -30,8 +30,8 @@ export interface CardStore {
   markFailed(owner: string, repo: string, errorCode: string, reasons?: string[]): Promise<void>;
   /** Drop the state marker. Used to release a claim that was never followed through. */
   clearState(owner: string, repo: string): Promise<void>;
-  /** Publish the card and clear the generating marker. The SVG lands before the payload. */
-  writeCard(owner: string, repo: string, svg: string, payload: CardPayload): Promise<void>;
+  /** Publish the card and clear the generating marker. The PNG lands before the payload. */
+  writeCard(owner: string, repo: string, png: Buffer, payload: CardPayload): Promise<void>;
   /**
    * Atomically claim one slot from today's generation budget.
    *
@@ -47,12 +47,15 @@ const prefix = (owner: string, repo: string): string => `cards/${owner}/${repo}`
 /**
  * Where the world fetches the card from.
  *
- * The bucket is public, so a reader gets the SVG straight from it. Serving the image through
+ * The bucket is public, so a reader gets the PNG straight from it. Serving the image through
  * Cloud Run instead would put a billed request in front of every README view of every card,
  * to hand back bytes the bucket was already willing to hand back for free.
+ *
+ * PNG, not SVG: dev.to proxies remote images and will not serve an SVG, so a card that is
+ * only an SVG does not exist on the platform this was built for.
  */
 const publicCardUrl = (bucketName: string, owner: string, repo: string): string =>
-  `https://storage.googleapis.com/${bucketName}/${prefix(owner, repo)}/card.svg`;
+  `https://storage.googleapis.com/${bucketName}/${prefix(owner, repo)}/card.png`;
 
 interface QuotaFile {
   count: number;
@@ -167,13 +170,13 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
       });
     },
 
-    async writeCard(owner, repo, svg, payload) {
+    async writeCard(owner, repo, png, payload) {
       const base = prefix(owner, repo);
 
-      // SVG first: `readState` reads the payload as ready, so a crash between the two
+      // Image first: `readState` reads the payload as ready, so a crash between the two
       // leaves the repo retryable rather than ready-with-no-card.
-      await bucket.file(`${base}/card.svg`).save(svg, {
-        contentType: 'image/svg+xml',
+      await bucket.file(`${base}/card.png`).save(png, {
+        contentType: 'image/png',
         metadata: { cacheControl: 'public, max-age=3600' },
       });
 

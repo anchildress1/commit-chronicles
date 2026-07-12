@@ -1,5 +1,4 @@
-import type { JSX } from 'react';
-import { useState, type SyntheticEvent } from 'react';
+import { useState, type JSX, type SyntheticEvent } from 'react';
 import { InvalidSlugError, parseSlug, type RepoSlug } from '../../shared/slug.js';
 
 interface RepoEntryProps {
@@ -16,7 +15,7 @@ export function RepoEntry({
   onSubmit,
   submitLabel,
   initialValue = '',
-}: RepoEntryProps): JSX.Element {
+}: Readonly<RepoEntryProps>): JSX.Element {
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
 

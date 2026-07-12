@@ -188,10 +188,8 @@ export function renderCard(payload: CardPayload): string {
     `<rect width="${CARD.width}" height="${CARD.height}" fill="url(#glow)"/>`,
     `<rect width="${CARD.width}" height="${CARD.height}" fill="url(#vignette)"/>`,
     `<rect width="${CARD.width}" height="5" fill="url(#rule)"/>`,
-  );
 
-  // Header: product mark, then the observed meta. No opinion in this row.
-  parts.push(
+    // Header: product mark, then the observed meta. No opinion in this row.
     mark(76, 70, accent, 1.6),
     text('Commit Chronicles', {
       x: 104,
@@ -228,10 +226,8 @@ export function renderCard(payload: CardPayload): string {
       uppercase: true,
     }),
     headline.svg,
-  );
 
-  // Axes.
-  parts.push(
+    // Axes.
     `<line x1="${box.x}" y1="${round(box.y)}" x2="${box.x}" y2="${round(box.y + box.height)}" stroke="${INK}" stroke-opacity="0.14"/>`,
     `<line x1="${box.x}" y1="${round(box.y + box.height)}" x2="${box.x + box.width}" y2="${round(box.y + box.height)}" stroke="${INK}" stroke-opacity="0.14"/>`,
   );
@@ -329,10 +325,9 @@ export function renderCard(payload: CardPayload): string {
     ].join('');
   };
 
-  const firstLabel = (() => {
-    const tail = payload.labelFirst.trim();
-    return `${formatClock(facts.firstCommitAt)} · ${formatDay(facts.firstCommitAt)}${tail ? ` — ${tail}` : ''}`;
-  })();
+  const firstTail = payload.labelFirst.trim();
+  const firstStamp = `${formatClock(facts.firstCommitAt)} · ${formatDay(facts.firstCommitAt)}`;
+  const firstLabel = firstTail ? `${firstStamp} — ${firstTail}` : firstStamp;
 
   const lastLabel = payload.labelLast.trim()
     ? payload.labelLast.trim()
@@ -350,10 +345,10 @@ export function renderCard(payload: CardPayload): string {
     parts.push(anchor(pivotDot, payload.labelPivot.trim(), '#cbc8bf', 'middle'));
   }
 
-  parts.push(anchor(lastDot, lastLabel, accent, 'end'));
-
-  // Foot: the disclosure, the author, the attribution.
   parts.push(
+    anchor(lastDot, lastLabel, accent, 'end'),
+
+    // Foot: the disclosure, the author, the attribution.
     `<line x1="60" y1="551" x2="${CARD.width - 60}" y2="551" stroke="${INK}" stroke-opacity="0.14"/>`,
     text(caption(facts.lastCommitAt), {
       x: 60,

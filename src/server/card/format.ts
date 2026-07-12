@@ -16,7 +16,7 @@ export function parseSnowflakeTimestamp(value: string): Date {
   if (!match) {
     const fallback = new Date(value);
     if (Number.isNaN(fallback.getTime())) {
-      throw new Error(`unparseable Snowflake timestamp: ${value}`);
+      throw new TypeError(`unparseable Snowflake timestamp: ${value}`);
     }
     return fallback;
   }
@@ -93,11 +93,11 @@ export function caption(lastCommitAt: string): string {
 
 export function escapeXml(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
 
 /**

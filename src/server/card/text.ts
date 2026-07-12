@@ -98,10 +98,10 @@ function mergeRuns(words: Word[]): Run[] {
   const runs: Run[] = [];
 
   for (const [index, word] of words.entries()) {
-    const previous = runs[runs.length - 1];
+    const previous = runs.at(-1);
     const spaced = index > 0 && word.spaceBefore ? ` ${word.text}` : word.text;
 
-    if (previous && previous.italic === word.italic) {
+    if (previous?.italic === word.italic) {
       previous.text += spaced;
     } else {
       runs.push({ text: spaced, italic: word.italic });
@@ -157,7 +157,7 @@ export function wrapHeadline(
   }
 
   // Over budget even at the smallest size: print it all anyway rather than truncate.
-  const fontSize = sizes[sizes.length - 1] ?? 18;
+  const fontSize = sizes.at(-1) ?? 18;
   return { lines: wrapAt(words, fontSize, maxWidth), fontSize };
 }
 
@@ -180,5 +180,5 @@ export function fitOneLine(
   const width = (size: number): number =>
     measure(text, size, face) + letterSpacing * Math.max(0, text.length - 1);
 
-  return sizes.find((size) => width(size) <= maxWidth) ?? sizes[sizes.length - 1] ?? 10;
+  return sizes.find((size) => width(size) <= maxWidth) ?? sizes.at(-1) ?? 10;
 }

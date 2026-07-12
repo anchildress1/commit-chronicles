@@ -88,7 +88,7 @@ describe('buildPlot', () => {
 
   it('carries Snowflake’s night flag through untouched', () => {
     const night = buildPlot(DESCENT_PLOT, BOX).dots.filter((dot) => dot.night);
-    expect(night.length).toBe(DESCENT_PLOT.filter((point) => point.n).length);
+    expect(night).toHaveLength(DESCENT_PLOT.filter((point) => point.n).length);
   });
 
   it('emits a closing x tick naming the last day', () => {

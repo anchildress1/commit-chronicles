@@ -111,7 +111,7 @@ export function buildPlot(plot: PlotPoint[], box: PlotBox): PlotGeometry {
     .sort((a, b) => a.ms - b.ms);
 
   const startMs = points[0]?.ms ?? 0;
-  const endMs = points[points.length - 1]?.ms ?? startMs + 1;
+  const endMs = points.at(-1)?.ms ?? startMs + 1;
   const lastIndex = points.length - 1;
 
   // A beeswarm, because a repo that commits four times in one night is four dots, and
@@ -171,7 +171,7 @@ function monthTicks(startMs: number, endMs: number, box: PlotBox): { x: number; 
   });
 
   // The closing tick always wins; a month boundary sitting on top of it is noise.
-  const closing = ticks[ticks.length - 1];
+  const closing = ticks.at(-1);
   if (!closing) return ticks;
 
   return ticks.filter((tick, index) => index === ticks.length - 1 || tick.x < closing.x - 60);

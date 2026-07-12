@@ -9,7 +9,7 @@ interface LandingProps {
 /** Pre-generated, so a judge clicking one never waits on a cold Cortex call. */
 const EXAMPLES = ['anchildress1/rai-lint', 'anchildress1/my-hermantic-agent', 'torvalds/linux'];
 
-export function Landing({ onSubmit }: LandingProps): JSX.Element {
+export function Landing({ onSubmit }: Readonly<LandingProps>): JSX.Element {
   return (
     <main className="stage">
       <p className="eyebrow" data-anim style={{ animationDelay: '0s' }}>

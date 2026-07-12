@@ -58,7 +58,7 @@ const LABEL: Record<CopyState, (idle: string) => string> = {
 };
 
 /** The card is the product, so it gets the page. Everything else is chrome. */
-export function Result({ slug, cardUrl, pageUrl, onHome }: ResultProps): JSX.Element {
+export function Result({ slug, cardUrl, pageUrl, onHome }: Readonly<ResultProps>): JSX.Element {
   const [imageCopy, copyImage] = useCopy();
   const [embedCopy, copyEmbed] = useCopy();
 

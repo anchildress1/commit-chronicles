@@ -26,6 +26,30 @@ export interface SnowflakeClient {
 
 snowflake.configure({ logLevel: 'WARN' });
 
+/**
+ * Run one statement on a borrowed connection.
+ *
+ * The driver is callback-based, so this is where the promise is made. Lifted out of the pool
+ * callback rather than nested inside it: the two concerns are the statement and the borrowing,
+ * and only the statement lives here.
+ */
+function runStatement(
+  connection: snowflake.Connection,
+  sqlText: string,
+  binds: string[],
+): Promise<Record<string, unknown>[]> {
+  return new Promise<Record<string, unknown>[]>((resolve, reject) => {
+    connection.execute({
+      sqlText,
+      binds,
+      complete: (error, _statement, result) => {
+        if (error) reject(error);
+        else resolve((result ?? []) as Record<string, unknown>[]);
+      },
+    });
+  });
+}
+
 export function createSnowflakeClient(config: Config): SnowflakeClient {
   const { snowflake: sf } = config;
 
@@ -45,28 +69,12 @@ export function createSnowflakeClient(config: Config): SnowflakeClient {
     { max: 4, min: 0 },
   );
 
+  // A connection that cannot be acquired, or a pool that is draining, rejects out of `use`
+  // and never reaches the statement at all. Returning its promise is what propagates that:
+  // swallowed, it would leave the caller hanging and the repo stuck on `generating` until
+  // the task deadline.
   const query = async (sqlText: string, binds: string[]): Promise<Record<string, unknown>[]> =>
-    new Promise<Record<string, unknown>[]>((resolve, reject) => {
-      pool
-        .use(
-          async (connection) =>
-            new Promise<void>((settle) => {
-              connection.execute({
-                sqlText,
-                binds,
-                complete: (error, _statement, result) => {
-                  if (error) reject(error);
-                  else resolve((result ?? []) as Record<string, unknown>[]);
-                  settle();
-                },
-              });
-            }),
-        )
-        // A connection that cannot be acquired, or a pool that is draining, rejects here
-        // and never reaches `complete`. Dropped, it leaves this promise unsettled and the
-        // repo stuck on `generating` until the task deadline.
-        .catch(reject);
-    });
+    pool.use(async (connection) => runStatement(connection, sqlText, binds));
 
   // The driver hands back VARIANT as a JSON string unless the column is typed.
   const variant = (value: unknown): unknown =>

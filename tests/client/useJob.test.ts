@@ -291,7 +291,7 @@ describe('useJob', () => {
 
     const before = calls.length;
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(calls.length).toBe(before);
+    expect(calls).toHaveLength(before);
     expect(result.current.state?.status).toBe('failed');
   });
 
@@ -307,6 +307,6 @@ describe('useJob', () => {
     unmount();
     await vi.advanceTimersByTimeAsync(10_000);
 
-    expect(calls.length).toBe(before);
+    expect(calls).toHaveLength(before);
   });
 });

@@ -21,7 +21,7 @@ const DOTS = Array.from({ length: 11 }, (_, i) => ({
   delay: i * 0.16,
 }));
 
-export function Loading({ slug }: LoadingProps): JSX.Element {
+export function Loading({ slug }: Readonly<LoadingProps>): JSX.Element {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {

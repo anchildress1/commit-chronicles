@@ -10,7 +10,7 @@ interface MarkProps {
  * The card's own grammar — a hollow daylight dot, a night dot, and the accent dot that ends
  * the story. The same mark signs the card, so the page and the README read as one product.
  */
-export function Mark({ size = 26 }: MarkProps): JSX.Element {
+export function Mark({ size = 26 }: Readonly<MarkProps>): JSX.Element {
   return (
     <svg
       className="mark"

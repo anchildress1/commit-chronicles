@@ -19,18 +19,33 @@ export class InvalidSlugError extends Error {
 }
 
 /**
+ * Strip leading and trailing slashes.
+ *
+ * A scan, not a pattern: `/^\/+|\/+$/` backtracks super-linearly, and this runs on a string
+ * a stranger typed into the URL bar.
+ */
+function trimSlashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === '/') start += 1;
+  while (end > start && value[end - 1] === '/') end -= 1;
+  return value.slice(start, end);
+}
+
+/**
  * Normalize input into an `owner/repo` slug.
  *
  * Accepts a bare slug, a github.com URL, a `.git` suffix, and stray whitespace.
  * @throws {InvalidSlugError} on anything else.
  */
 export function parseSlug(input: string): RepoSlug {
-  const cleaned = input
-    .trim()
-    .replace(/^git\+/i, '')
-    .replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .replace(/^\/+|\/+$/g, '');
+  const cleaned = trimSlashes(
+    input
+      .trim()
+      .replace(/^git\+/i, '')
+      .replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '')
+      .replace(/\.git$/i, ''),
+  );
 
   if (cleaned.includes('..')) {
     throw new InvalidSlugError(input);

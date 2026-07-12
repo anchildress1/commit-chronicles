@@ -70,7 +70,13 @@ const FALLBACK: FailureCopy = {
   explain: 'That repository could not be read. Check the owner and name and try again.',
 };
 
-export function Failed({ slug, onSubmit, onRetry, errorCode, reason }: FailedProps): JSX.Element {
+export function Failed({
+  slug,
+  onSubmit,
+  onRetry,
+  errorCode,
+  reason,
+}: Readonly<FailedProps>): JSX.Element {
   const copy = (errorCode === undefined ? undefined : FAILURE_COPY[errorCode]) ?? FALLBACK;
   const explain = reason ?? copy.explain;
 

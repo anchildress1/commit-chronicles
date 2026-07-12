@@ -31,6 +31,7 @@ const app = createApp({
   generator,
   taskAuth: createTaskAuthenticator(config),
   clientRoot: './dist/client',
+  publicOrigin: config.publicOrigin,
 });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {

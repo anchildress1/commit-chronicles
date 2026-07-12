@@ -48,7 +48,12 @@ function harness(cap = 5, authOk = true): Harness {
     queue,
   });
 
-  const app = createApp({ store, generator, taskAuth: fakeTaskAuth(authOk) });
+  const app = createApp({
+    store,
+    generator,
+    taskAuth: fakeTaskAuth(authOk),
+    publicOrigin: CONFIG.publicOrigin,
+  });
   return { app, store, queue, generator };
 }
 
@@ -199,7 +204,12 @@ describe('POST /internal/rerender', () => {
     const snowflake = fakeSnowflake(() => CARD, CARD);
     const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
     const generator = createGenerator({ store, snowflake, config: CONFIG, queue });
-    const app = createApp({ store, generator, taskAuth: fakeTaskAuth(true) });
+    const app = createApp({
+      store,
+      generator,
+      taskAuth: fakeTaskAuth(true),
+      publicOrigin: CONFIG.publicOrigin,
+    });
 
     const response = await post(app, '/internal/rerender', { repo: 'atlas/pipeline' }, AUTH);
 

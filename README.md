@@ -10,7 +10,7 @@ another — and renders it as a card you can drop into a README.
 Plain SQL finds the story. Cortex narrates it, and picks the color it deserves.
 
 ```md
-[![Commit Chronicle](https://commitchronicles.dev/owner/repo/card.svg)](https://commitchronicles.dev/owner/repo)
+[![Commit Chronicles](https://storage.googleapis.com/commit-chronicles-cards/cards/owner/repo/card.svg)](https://commitchronicles.dev/owner/repo)
 ```
 
 ## How it works 🔧

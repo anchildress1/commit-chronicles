@@ -9,6 +9,7 @@ import { parseSlug } from '../../src/shared/slug.js';
 
 const SLUG = parseSlug('atlas/pipeline');
 const CARD = 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg';
+const PAGE = 'https://commitchronicles.dev/atlas/pipeline';
 
 /** Swap the clipboard for one that answers however the test needs it to. */
 function clipboard(answer: 'accept' | 'refuse'): { writeText: ReturnType<typeof vi.fn> } {
@@ -24,7 +25,7 @@ afterEach(() => {
 });
 
 const draw = (): void => {
-  render(<Result slug={SLUG} cardUrl={CARD} onHome={() => undefined} />);
+  render(<Result slug={SLUG} cardUrl={CARD} pageUrl={PAGE} onHome={() => undefined} />);
 };
 
 describe('Result', () => {
@@ -38,13 +39,20 @@ describe('Result', () => {
     );
   });
 
+  it('shows the site’s real host rather than a hardcoded one', () => {
+    clipboard('accept');
+    draw();
+
+    expect(screen.getByText('commitchronicles.dev/')).toBeInTheDocument();
+  });
+
   it('embeds the bucket image and links back to the page', () => {
     clipboard('accept');
     draw();
 
-    const embed = screen.getByText('[![Commit Chronicle]', { exact: false }).textContent ?? '';
+    const embed = screen.getByText('[![Commit Chronicles]', { exact: false }).textContent ?? '';
     expect(embed).toContain(`(${CARD})`);
-    expect(embed).toContain('/atlas/pipeline)');
+    expect(embed).toContain(`(${PAGE})`);
   });
 
   it('copies the bucket URL, not a link to this service', async () => {
@@ -66,7 +74,7 @@ describe('Result', () => {
     await userEvent.click(screen.getByRole('button', { name: /Copy README embed/ }));
 
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining(`[![Commit Chronicle](${CARD})`),
+      expect.stringContaining(`[![Commit Chronicles](${CARD})`),
     );
   });
 
@@ -87,7 +95,7 @@ describe('Result', () => {
   it('goes home when asked', async () => {
     clipboard('accept');
     const onHome = vi.fn();
-    render(<Result slug={SLUG} cardUrl={CARD} onHome={onHome} />);
+    render(<Result slug={SLUG} cardUrl={CARD} pageUrl={PAGE} onHome={onHome} />);
 
     await userEvent.click(screen.getByRole('button', { name: /read another repo/ }));
 

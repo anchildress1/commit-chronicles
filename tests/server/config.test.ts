@@ -99,4 +99,31 @@ describe('loadConfig', () => {
 
     expect(loadConfig().tasks).toMatchObject({ queue: 'gen', workerUrl: 'https://worker' });
   });
+
+  it('defaults the public origin to the site', () => {
+    delete process.env['PUBLIC_ORIGIN'];
+    expect(loadConfig().publicOrigin).toBe('https://commitchronicles.dev');
+  });
+
+  it('gives a bare host the scheme it needs to be a link', () => {
+    // Without it, `[card](chronicles.example.com/o/r)` is a *relative* Markdown link, and
+    // every README embed points inside the reader's own repository.
+    process.env['PUBLIC_ORIGIN'] = 'chronicles.example.com';
+    expect(loadConfig().publicOrigin).toBe('https://chronicles.example.com');
+  });
+
+  it('keeps an origin that already has a scheme', () => {
+    process.env['PUBLIC_ORIGIN'] = 'http://localhost:5273';
+    expect(loadConfig().publicOrigin).toBe('http://localhost:5273');
+  });
+
+  it('drops a trailing slash, so the embed never says //', () => {
+    process.env['PUBLIC_ORIGIN'] = 'https://chronicles.example.com/';
+    expect(loadConfig().publicOrigin).toBe('https://chronicles.example.com');
+  });
+
+  it('refuses an origin that is not one', () => {
+    process.env['PUBLIC_ORIGIN'] = 'https://';
+    expect(() => loadConfig()).toThrow(/PUBLIC_ORIGIN/);
+  });
 });

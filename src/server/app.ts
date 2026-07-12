@@ -12,14 +12,18 @@ export interface AppDeps {
   taskAuth?: TaskAuthenticator;
   /** Where the built SPA lives, relative to the process cwd. Omit to skip static serving. */
   clientRoot?: string;
+  /** The site's real address. It is what a README embed links to, so it cannot be guessed
+   *  from the request — the author may be on localhost. */
+  publicOrigin: string;
 }
 
 /**
- * The HTTP surface: generation, job state, the card, the queue worker, and the SPA.
+ * The HTTP surface: generation, job state, the queue worker, and the SPA.
  *
- * The serving path reads the bucket and nothing else, so a cached page costs nothing.
+ * The serving path reads the bucket and nothing else, so a cached page costs nothing. The card
+ * itself is never served here — the public bucket serves it.
  */
-export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): Hono {
+export function createApp({ store, generator, taskAuth, clientRoot, publicOrigin }: AppDeps): Hono {
   const app = new Hono();
 
   app.get('/healthz', (c) => c.json({ ok: true }));
@@ -99,7 +103,13 @@ export function createApp({ store, generator, taskAuth, clientRoot }: AppDeps): 
     }
 
     const state = await store.readState(slug.owner, slug.repo);
-    return c.json(state, { headers: { 'cache-control': 'no-store' } });
+
+    // The embed is pasted into a README and read by strangers, so its link has to be the site's
+    // real address — not whichever origin the author happened to be browsing from.
+    const answer =
+      state.status === 'ready' ? { ...state, pageUrl: `${publicOrigin}/${slug.slug}` } : state;
+
+    return c.json(answer, { headers: { 'cache-control': 'no-store' } });
   });
 
   // There is no card route. The bucket is public and serves the SVG itself, so a README view

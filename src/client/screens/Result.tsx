@@ -7,6 +7,8 @@ interface ResultProps {
   slug: RepoSlug;
   /** The card's public bucket URL, from the ready state. */
   cardUrl: string;
+  /** The repo's page on the real site, from the ready state. */
+  pageUrl: string;
   onHome: () => void;
 }
 
@@ -56,18 +58,17 @@ const LABEL: Record<CopyState, (idle: string) => string> = {
 };
 
 /** The card is the product, so it gets the page. Everything else is chrome. */
-export function Result({ slug, cardUrl, onHome }: ResultProps): JSX.Element {
-  const origin = window.location.origin;
+export function Result({ slug, cardUrl, pageUrl, onHome }: ResultProps): JSX.Element {
   const [imageCopy, copyImage] = useCopy();
   const [embedCopy, copyEmbed] = useCopy();
 
-  const embed = embedMarkdown(slug, origin, cardUrl);
+  const embed = embedMarkdown(cardUrl, pageUrl);
 
   return (
     <main className="stage stage--result">
       <p className="address">
         <span className="address__dot" aria-hidden="true" />
-        <span className="address__host">commitchronicles.dev/</span>
+        <span className="address__host">{new URL(pageUrl).host}/</span>
         <span>{slug.slug}</span>
       </p>
 

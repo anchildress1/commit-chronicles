@@ -63,18 +63,21 @@ describe('fetchState', () => {
 
 describe('embedMarkdown', () => {
   const CARD = 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg';
+  const PAGE = 'https://commitchronicles.dev/atlas/pipeline';
 
   it('points the image at the bucket and the link at the page', () => {
-    expect(embedMarkdown(SLUG, 'https://commitchronicles.dev', CARD)).toBe(
-      `[![Commit Chronicle](${CARD})](https://commitchronicles.dev/atlas/pipeline)`,
-    );
+    expect(embedMarkdown(CARD, PAGE)).toBe(`[![Commit Chronicles](${CARD})](${PAGE})`);
   });
 
   it('keeps the site out of the image path, so a README view is never billed', () => {
-    const embed = embedMarkdown(SLUG, 'https://commitchronicles.dev', CARD);
-    const image = /!\[Commit Chronicle\]\(([^)]+)\)/.exec(embed)?.[1];
+    const image = /!\[Commit Chronicles\]\(([^)]+)\)/.exec(embedMarkdown(CARD, PAGE))?.[1];
 
     expect(image).toBe(CARD);
     expect(image).not.toContain('commitchronicles.dev');
+  });
+
+  it('never links a README at the origin the author happened to be on', () => {
+    // window.location.origin here is localhost. A README carrying that is a dead link.
+    expect(embedMarkdown(CARD, PAGE)).not.toContain('localhost');
   });
 });

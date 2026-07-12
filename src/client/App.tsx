@@ -40,11 +40,12 @@ export function App(): JSX.Element {
   const screen = useMemo(() => {
     if (!slug) return <Landing onSubmit={navigate} />;
     if (error) return <Failed slug={slug} reason={error} onSubmit={navigate} onRetry={retry} />;
-    if (state?.status === 'ready' && state.cardUrl)
+    if (state?.status === 'ready' && state.cardUrl && state.pageUrl)
       return (
         <Result
           slug={slug}
           cardUrl={state.cardUrl}
+          pageUrl={state.pageUrl}
           onHome={() => {
             navigate(null);
           }}

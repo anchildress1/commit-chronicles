@@ -63,7 +63,7 @@ ENV_VARS="GOOGLE_CLOUD_PROJECT=${PROJECT},CARD_BUCKET=${CARD_BUCKET},DAILY_GENER
 # on `generating` until its TTL lapsed. With no queue the service runs the pipeline inline,
 # which is correct for the seconds between the first deploy and the update below.
 if [[ -n "${WORKER_URL}" ]]; then
-  ENV_VARS="${ENV_VARS},TASKS_LOCATION=${REGION},TASKS_QUEUE=${TASKS_QUEUE},TASKS_INVOKER_SA=${TASKS_SA},WORKER_URL=${WORKER_URL},PUBLIC_ORIGIN=${WORKER_URL}"
+  ENV_VARS="${ENV_VARS},TASKS_LOCATION=${REGION},TASKS_QUEUE=${TASKS_QUEUE},TASKS_INVOKER_SA=${TASKS_SA},WORKER_URL=${WORKER_URL},PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-${WORKER_URL}}"
 else
   echo "    first deploy: no service URL yet, so the queue is wired in afterwards"
 fi
@@ -93,7 +93,7 @@ if [[ -z "${WORKER_URL}" ]]; then
   echo "==> wiring the queue to ${SERVICE_URL}"
   gcloud run services update "${SERVICE}" \
     --project "${PROJECT}" --region "${REGION}" \
-    --update-env-vars "TASKS_LOCATION=${REGION},TASKS_QUEUE=${TASKS_QUEUE},TASKS_INVOKER_SA=${TASKS_SA},WORKER_URL=${SERVICE_URL},PUBLIC_ORIGIN=${SERVICE_URL}"
+    --update-env-vars "TASKS_LOCATION=${REGION},TASKS_QUEUE=${TASKS_QUEUE},TASKS_INVOKER_SA=${TASKS_SA},WORKER_URL=${SERVICE_URL},PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-${SERVICE_URL}}"
 fi
 
 # Inactive revisions are free, but they are also clutter and they pin the images the

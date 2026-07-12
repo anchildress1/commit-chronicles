@@ -47,6 +47,26 @@ function int(name: string, fallback: number): number {
 }
 
 /**
+ * The site's address, as an absolute origin with no trailing slash.
+ *
+ * A bare host is the natural thing to type, and it is also the one thing that cannot work:
+ * `[card](example.com/o/r)` is a *relative* link in Markdown, so every README embed would
+ * point at a path inside the reader's own repository. A missing scheme becomes https.
+ */
+function origin(name: string, fallback: string): string {
+  const raw = (process.env[name] ?? fallback).trim();
+  const absolute = /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(absolute);
+  } catch {
+    throw new Error(`env var ${name} must be an origin like https://example.com, got: ${raw}`);
+  }
+  return parsed.origin;
+}
+
+/**
  * Cloud Tasks is all-or-nothing: a half-configured queue would enqueue jobs that can
  * never be delivered, and the repo would sit on `generating` forever.
  */
@@ -71,7 +91,7 @@ export function loadConfig(): Config {
   return {
     port: int('PORT', 8080),
     bucket: required('CARD_BUCKET'),
-    publicOrigin: process.env['PUBLIC_ORIGIN'] ?? 'https://commitchronicles.dev',
+    publicOrigin: origin('PUBLIC_ORIGIN', 'https://commitchronicles.dev'),
     dailyGenerationCap: int('DAILY_GENERATION_CAP', 100),
     generatingTtlMs: int('GENERATING_TTL_SECONDS', 600) * 1000,
     tasks: loadTasks(),

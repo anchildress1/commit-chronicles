@@ -76,6 +76,7 @@ test('a ready repo shows the card and the README embed', async ({ page }) => {
       status: 'ready',
       repo: 'atlas/pipeline',
       cardUrl: 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg',
+      pageUrl: 'https://commitchronicles.dev/atlas/pipeline',
     },
   });
 
@@ -87,7 +88,7 @@ test('a ready repo shows the card and the README embed', async ({ page }) => {
   // The image is fetched from the bucket, not from this origin: a README view of a card must
   // not cost a Cloud Run request.
   await expect(card).toHaveAttribute('src', /^https:\/\/storage\.googleapis\.com\//);
-  await expect(page.getByText('[![Commit Chronicle]', { exact: false })).toContainText(
+  await expect(page.getByText('[![Commit Chronicles]', { exact: false })).toContainText(
     'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg',
   );
 });
@@ -119,6 +120,7 @@ test('the shell takes the card’s accent once the card exists', async ({ page }
       repo: 'atlas/pipeline',
       accent: '#d3e85a',
       cardUrl: 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg',
+      pageUrl: 'https://commitchronicles.dev/atlas/pipeline',
     },
   });
 

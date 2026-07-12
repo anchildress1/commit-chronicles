@@ -17,6 +17,7 @@ CARD_BUCKET="${CARD_BUCKET:-commit-chronicles-cards}"
 TASKS_QUEUE="${TASKS_QUEUE:-commit-chronicles-gen}"
 DAILY_GENERATION_CAP="${DAILY_GENERATION_CAP:-50}"
 KEEP_REVISIONS="${KEEP_REVISIONS:-3}"
+MAX_INSTANCES="${MAX_INSTANCES:-1}"
 
 RUN_SA="commit-chronicles-run@${PROJECT}.iam.gserviceaccount.com"
 TASKS_SA="commit-chronicles-tasks@${PROJECT}.iam.gserviceaccount.com"
@@ -48,7 +49,9 @@ WORKER_URL="$(gcloud run services describe "${SERVICE}" \
 #   --cpu 1 / --concurrency 80
 #                            CPU below 1 forces concurrency to 1, so every visitor would need
 #                            an instance of their own. One vCPU is both cheaper and faster.
-#   --max-instances 2        the ceiling on a bad day.
+#   --max-instances 1        one instance, ever. At concurrency 80 it still absorbs a crowd,
+#                            and the serving path is a static shell — the bucket serves the
+#                            cards. Nothing here can fan out into a surprise bill.
 #   --timeout 600            bounds the worst case: a generation wedged on Snowflake bills
 #                            until it is killed. The page stops waiting at five minutes.
 echo "==> deploying ${SERVICE}"
@@ -76,7 +79,7 @@ gcloud run deploy "${SERVICE}" \
   --memory 512Mi \
   --concurrency 80 \
   --min-instances 0 \
-  --max-instances 2 \
+  --max-instances "${MAX_INSTANCES}" \
   --timeout 600 \
   --no-cpu-boost \
   --execution-environment gen1 \

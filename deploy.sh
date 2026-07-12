@@ -15,11 +15,15 @@ set -euo pipefail
 # make. Named keys only — sourcing .env would pull SNOWFLAKE_PAT and GITHUB_TOKEN into the
 # environment of a process that shells out to gcloud, which is exactly what Secret Manager
 # exists to prevent. An already-exported value wins, so CI can override with no file present.
-CONFIG_KEYS=(SNOWFLAKE_ACCOUNT SNOWFLAKE_USER CARD_BUCKET PUBLIC_ORIGIN)
+#
+# Every key here is optional at *this* layer: a missing one falls through to the defaults
+# below, or to the ${VAR:?} guards that make the genuinely-required ones fatal. Hence the
+# `|| true` — under `set -e`, a grep that matches nothing would otherwise kill the deploy.
+CONFIG_KEYS=(SNOWFLAKE_ACCOUNT SNOWFLAKE_USER CARD_BUCKET PUBLIC_ORIGIN DAILY_GENERATION_CAP)
 if [[ -f .env ]]; then
   for key in "${CONFIG_KEYS[@]}"; do
     [[ -n ${!key:-} ]] && continue
-    value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2-)"
+    value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2- || true)"
     [[ -n ${value} ]] && export "${key}=${value}"
   done
 fi

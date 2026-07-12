@@ -105,8 +105,9 @@ rescaffold; if you find a reference to either, it is stale — fix it.
 - A repo with no real story says so. Sparse histories get an honest template card, not
   manufactured drama.
 - Cost guards are mandatory: cap commits per repo, cap daily live generations, cache
-  failed states, reject private/missing/oversized repos, and keep gallery cards
-  pre-generated.
+  failed states, reject private/missing repos, and keep the landing-page example cards
+  pre-generated. An oversized history is windowed to its newest slice, not rejected —
+  and the card says so rather than passing a slice off as the whole life.
 
 ## Documentation
 

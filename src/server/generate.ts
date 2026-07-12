@@ -94,25 +94,51 @@ function today(now: Date): string {
 export function createGenerator(deps: GeneratorDeps): Generator {
   const { store, config, queue, now = () => new Date(), log = () => undefined } = deps;
 
+  /** The answers that need no claim at all: a card, a dead end, or a run already going. */
+  const refuse = (state: JobState): StartOutcome | null => {
+    if (state.status === 'ready') {
+      return { accepted: false, reason: 'already_ready', state };
+    }
+
+    if (state.status === 'failed' && !isRetryable(state.errorCode)) {
+      return { accepted: false, reason: 'already_failed', state };
+    }
+
+    if (state.status === 'generating') {
+      const age = now().getTime() - new Date(state.startedAt).getTime();
+      // Older than the TTL means the run died. Younger means live — and paying twice.
+      if (age < config.generatingTtlMs) {
+        return { accepted: false, reason: 'already_generating', state };
+      }
+    }
+
+    return null;
+  };
+
+  /**
+   * Undo an admission that nothing will ever act on.
+   *
+   * What could not be undone is logged rather than thrown: the caller has to be told that the
+   * enqueue failed, not that the apology for it also failed.
+   */
+  const release = async (slug: RepoSlug, quotaDate: string): Promise<void> => {
+    const rollback = await Promise.allSettled([
+      store.clearState(slug.owner, slug.repo),
+      store.releaseDailyQuota(quotaDate),
+    ]);
+
+    for (const outcome of rollback) {
+      if (outcome.status === 'rejected') {
+        log('rollback failed', { repo: slug.slug, cause: String(outcome.reason) });
+      }
+    }
+  };
+
   return {
     async start(slug) {
       const state = await store.readState(slug.owner, slug.repo);
-
-      if (state.status === 'ready') {
-        return { accepted: false, reason: 'already_ready', state };
-      }
-
-      if (state.status === 'failed' && !isRetryable(state.errorCode)) {
-        return { accepted: false, reason: 'already_failed', state };
-      }
-
-      if (state.status === 'generating') {
-        const age = now().getTime() - new Date(state.startedAt).getTime();
-        // Older than the TTL means the run died. Younger means live — and paying twice.
-        if (age < config.generatingTtlMs) {
-          return { accepted: false, reason: 'already_generating', state };
-        }
-      }
+      const refusal = refuse(state);
+      if (refusal) return refusal;
 
       // Replacing a retryable/dead marker is conditional on the exact state we read. Two
       // retries cannot delete or overwrite each other's fresh claim.
@@ -155,20 +181,7 @@ export function createGenerator(deps: GeneratorDeps): Generator {
         // the TTL reaps it. Rolling back here would risk a second, paid, concurrent run.
         if (!(error instanceof TaskNotCreatedError)) throw error;
 
-        // Nothing will ever pick this up, so release the claim instead of stranding the repo
-        // on `generating` until the TTL lapses. A rollback that fails is logged and stepped
-        // over: what the caller has to be told is that the enqueue failed, not that the
-        // apology for it also failed.
-        const rollback = await Promise.allSettled([
-          store.clearState(slug.owner, slug.repo),
-          store.releaseDailyQuota(quotaDate),
-        ]);
-        for (const outcome of rollback) {
-          if (outcome.status === 'rejected') {
-            log('rollback failed', { repo: slug.slug, cause: String(outcome.reason) });
-          }
-        }
-
+        await release(slug, quotaDate);
         throw error;
       }
 

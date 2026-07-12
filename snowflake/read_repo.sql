@@ -285,7 +285,15 @@ BEGIN
         -- is the database talking, not a genre a reader would name. Exact-match let it through.
         IFF(REGEXP_LIKE(LOWER(:card:ai:kicker::STRING),
                 '.*(relapse|nocturne|binge|collapse|fight|resurrection).*'),
-            'kicker_echoes_storyline', NULL)
+            'kicker_echoes_storyline', NULL),
+
+        -- A share in the headline turns the card back into the report it exists to replace,
+        -- and the chart already shows the proportion. Words as well as digits: the model
+        -- reaches for "fifty-six percent" the moment a digit check is all that stands there.
+        IFF(REGEXP_LIKE(
+                LOWER(:card:ai:headline_upright::STRING || ' ' || :card:ai:headline_accent::STRING),
+                '.*(percent|per cent|%|share of|proportion|majority of|[0-9]+ ?(%|percent)).*'),
+            'headline_has_stat', NULL)
     )) INTO :reasons;
 
     IF (ARRAY_SIZE(:reasons) > 0) THEN

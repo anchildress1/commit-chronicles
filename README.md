@@ -6,9 +6,15 @@ Paste a public GitHub repo. **Snowflake fetches its own commit history, finds th
 
 [![CI](https://github.com/anchildress1/commit-chronicles/actions/workflows/ci.yml/badge.svg)](https://github.com/anchildress1/commit-chronicles/actions/workflows/ci.yml) [![License: PolyForm Shield 1.0.0](https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-blue)](LICENSE) [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196)](https://www.conventionalcommits.org/)
 
+[![Snowflake Cortex](https://img.shields.io/badge/Snowflake-Cortex-29B5E8?logo=snowflake&logoColor=white)](#the-snowflake-case) [![Claude](https://img.shields.io/badge/Claude-D97757?logo=claude&logoColor=white)](https://claude.com/claude-code) [![Codex](https://img.shields.io/badge/Codex-000000?logo=openai&logoColor=white)](https://openai.com/codex) [![Copilot](https://img.shields.io/badge/Copilot-000000?logo=githubcopilot&logoColor=white)](https://github.com/features/copilot)
+
+[![Created](https://img.shields.io/github/created-at/anchildress1/commit-chronicles?label=repo%20created&color=6ab5f5)](https://github.com/anchildress1/commit-chronicles/commits) [![Last commit](https://img.shields.io/github/last-commit/anchildress1/commit-chronicles?color=d3e85a)](https://github.com/anchildress1/commit-chronicles/commits) [![Release](https://img.shields.io/github/v/release/anchildress1/commit-chronicles?color=e8a04a)](https://github.com/anchildress1/commit-chronicles/releases) [![Release date](https://img.shields.io/github/release-date/anchildress1/commit-chronicles?label=released&color=e8a04a)](https://github.com/anchildress1/commit-chronicles/releases)
+
 ![Commit Chronicles](https://repository-images.githubusercontent.com/1296802597/3d5d4e9b-0ea6-4ff1-b0a9-80e1947d7be3)
 
 **Live:** [commitchronicles.anchildress1.dev](https://commitchronicles.anchildress1.dev) · **Prize target:** Best Use of Snowflake
+
+> **Judging scope: `v1.0.0` is the challenge submission.** It was cut for the DEV Weekend Challenge deadline and is the only thing that should be judged. The repo was created on 10 Jul 2026 and everything in the entry was built inside the challenge window — the badges above are the receipt. Any commit or release after `v1.0.0` is post-deadline work and is not part of the entry.
 
 Three real repos, three storylines the detector found unaided — a **binge**, a **nocturne**, and a **relapse**. Every dot, timestamp, and quoted commit below is real:
 

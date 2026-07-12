@@ -102,7 +102,7 @@ BEGIN
             KICKER, HEADLINE_UPRIGHT, HEADLINE_ACCENT, HEADLINE_TRAIL,
             LABEL_FIRST, LABEL_PIVOT, LABEL_LAST,
             ACCENT, ACCENT_REASON,
-            FACTS, EVIDENCE, PLOT, MODEL, GENERATED_AT
+            FACTS, EVIDENCE, PLOT, MODEL, PIPELINE_VERSION, GENERATED_AT
         )
         SELECT
             w.REPO_OWNER, w.REPO_NAME, 'none', 0,
@@ -125,6 +125,7 @@ BEGIN
             OBJECT_CONSTRUCT(),
             p.PLOT,
             'none',
+            (SELECT VERSION FROM PIPELINE_VERSION),
             CURRENT_TIMESTAMP()
         FROM REPO_STORYLINE w
         JOIN CARD_PLOT p USING (REPO_OWNER, REPO_NAME)
@@ -151,6 +152,7 @@ BEGIN
                    'plot',            PLOT,
                    'model',           MODEL,
                    'cortexQueryId',   NULL,
+                   'pipelineVersion', PIPELINE_VERSION,
                    'generatedAt',     TO_VARCHAR(GENERATED_AT)
                )
           INTO :result
@@ -240,8 +242,10 @@ BEGIN
         IFF(:card:ai:label_first::STRING RLIKE '.*[0-9].*', 'label_first_has_digits',  NULL),
         IFF(:card:ai:label_pivot::STRING RLIKE '.*[0-9].*', 'label_pivot_has_digits',  NULL),
         IFF(:card:ai:label_last::STRING  RLIKE '.*[0-9].*', 'label_last_has_digits',   NULL),
-        IFF(LOWER(:card:ai:kicker::STRING) IN
-                ('relapse','nocturne','binge','collapse','fight','resurrection'),
+        -- The storyline is an internal label. A kicker that contains it ("the resurrection")
+        -- is the database talking, not a genre a reader would name. Exact-match let it through.
+        IFF(REGEXP_LIKE(LOWER(:card:ai:kicker::STRING),
+                '.*(relapse|nocturne|binge|collapse|fight|resurrection).*'),
             'kicker_echoes_storyline', NULL)
     )) INTO :reasons;
 
@@ -261,7 +265,7 @@ BEGIN
         KICKER, HEADLINE_UPRIGHT, HEADLINE_ACCENT, HEADLINE_TRAIL,
         LABEL_FIRST, LABEL_PIVOT, LABEL_LAST,
         ACCENT, ACCENT_REASON,
-        FACTS, EVIDENCE, PLOT, MODEL, CORTEX_QUERY_ID, GENERATED_AT
+        FACTS, EVIDENCE, PLOT, MODEL, CORTEX_QUERY_ID, PIPELINE_VERSION, GENERATED_AT
     )
     SELECT
         :P_OWNER,
@@ -284,6 +288,7 @@ BEGIN
         :card:plot,
         'claude-sonnet-4-5',
         :cortex_query_id,
+        (SELECT VERSION FROM PIPELINE_VERSION),
         CURRENT_TIMESTAMP();
 
     SELECT OBJECT_CONSTRUCT(
@@ -307,6 +312,7 @@ BEGIN
                'plot',            PLOT,
                'model',           MODEL,
                'cortexQueryId',   CORTEX_QUERY_ID,
+               'pipelineVersion', PIPELINE_VERSION,
                'generatedAt',     TO_VARCHAR(GENERATED_AT)
            )
       INTO :result

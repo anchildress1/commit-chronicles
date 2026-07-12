@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help install dev format format-check lint typecheck test build e2e perf secret-scan ai-checks deploy gcp-bootstrap snowflake-deploy clean
+.PHONY: help install dev format format-check lint typecheck test build e2e perf secret-scan ai-checks deploy gcp-bootstrap snowflake-deploy cards-stale clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -47,6 +47,9 @@ ai-checks: format-check lint typecheck test build ## The full gate an agent must
 # There is no default `snow` connection on this machine, so the connection is named.
 # The key is passphrase-protected: export PRIVATE_KEY_PASSPHRASE before running.
 SNOW ?= snow sql -c chronicles
+
+cards-stale: ## List cards written by a pipeline that no longer exists
+	$(SNOW) -q "SELECT REPO_OWNER, REPO_NAME, WRITTEN_BY, CURRENT_VERSION, GENERATED_AT FROM STALE_CARDS ORDER BY GENERATED_AT;"
 
 snowflake-deploy: ## Deploy every warehouse object, in dependency order
 	$(SNOW) -f snowflake/schema.sql

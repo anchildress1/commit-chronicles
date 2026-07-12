@@ -58,8 +58,31 @@ CREATE TABLE IF NOT EXISTS CARDS (
   PLOT             VARIANT,
   MODEL            STRING,
   CORTEX_QUERY_ID  STRING,
+  PIPELINE_VERSION STRING,
   GENERATED_AT     TIMESTAMP_TZ
 );
+
+-- CREATE TABLE IF NOT EXISTS leaves an existing CARDS untouched, so a new column has to
+-- be added explicitly or a warehouse that predates it never gets one.
+ALTER TABLE CARDS ADD COLUMN IF NOT EXISTS PIPELINE_VERSION STRING;
+
+-- A card is only as current as the prompt and the evidence that produced it. Hashing the
+-- deployed DDL means the version moves on its own when either changes; a hand-maintained
+-- constant is a version someone forgets to bump.
+CREATE OR REPLACE VIEW PIPELINE_VERSION AS
+SELECT LEFT(MD5(
+    GET_DDL('FUNCTION', 'CHRONICLE_CARD(VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR)')
+ || GET_DDL('VIEW', 'CARD_EVIDENCE')
+), 12) AS VERSION;
+
+-- Which cards were written by a pipeline that no longer exists. Regenerating costs a Cortex
+-- call each, so this reports rather than acts.
+CREATE OR REPLACE VIEW STALE_CARDS AS
+SELECT c.REPO_OWNER, c.REPO_NAME, c.PIPELINE_VERSION AS WRITTEN_BY, v.VERSION AS CURRENT_VERSION,
+       c.GENERATED_AT
+FROM CARDS c
+CROSS JOIN PIPELINE_VERSION v
+WHERE c.PIPELINE_VERSION IS DISTINCT FROM v.VERSION;
 
 -- An owner's-rights procedure cannot create a temporary table, so the ingest stages raw
 -- rows here and classifies them in SQL, where AI_CLASSIFY and AI_FILTER live. Rows are

@@ -64,6 +64,8 @@ export interface CardPayload {
   plot: PlotPoint[];
   model: string;
   cortexQueryId: string | null;
+  /** Hash of the prompt and evidence view that wrote this card. Moves when either does. */
+  pipelineVersion: string | null;
   generatedAt: string;
 }
 

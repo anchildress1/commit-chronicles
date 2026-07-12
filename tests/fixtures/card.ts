@@ -72,6 +72,7 @@ export const CARD: CardPayload = {
   plot: DESCENT_PLOT,
   model: 'claude-sonnet-4-5',
   cortexQueryId: '01b2-0000-abcd',
+  pipelineVersion: '6bf89f3d4d25',
   generatedAt: ts('2026-07-11T09:00:00'),
 };
 

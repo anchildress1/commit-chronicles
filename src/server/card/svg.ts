@@ -20,6 +20,8 @@ const MONO = "'Space Mono','SFMono-Regular',Menlo,Consolas,monospace";
 const SANS = "'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif";
 
 const INK = '#f3f0e8';
+/** The card's own background, used to knock out behind anchor labels. */
+const BACKDROP = '#0b0d12';
 const MUTED = '#b6b3aa';
 const DIM = '#77756d';
 
@@ -42,6 +44,8 @@ interface TextOptions {
   anchor?: 'start' | 'middle' | 'end';
   italic?: boolean;
   uppercase?: boolean;
+  /** Knocks the scatter out from behind the glyphs so the label stays readable. */
+  halo?: boolean;
 }
 
 function text(content: string, options: TextOptions): string {
@@ -55,6 +59,7 @@ function text(content: string, options: TextOptions): string {
     options.spacing ? `letter-spacing="${options.spacing}"` : '',
     options.anchor ? `text-anchor="${options.anchor}"` : '',
     options.italic ? 'font-style="italic"' : '',
+    options.halo ? `stroke="${BACKDROP}" stroke-width="3.5" paint-order="stroke"` : '',
   ].filter(Boolean);
 
   const body = options.uppercase ? content.toUpperCase() : content;
@@ -255,6 +260,7 @@ export function renderCard(payload: CardPayload): string {
         fill: '#cbc8bf',
         anchor: 'middle',
         italic: true,
+        halo: true,
       }),
       text(`${formatDay(facts.largestGap.from)} — ${formatDay(facts.largestGap.to)}`, {
         x: mid,
@@ -272,48 +278,60 @@ export function renderCard(payload: CardPayload): string {
   parts.push(...geometry.dots.map((dot) => renderDot(dot, accent)));
 
   // Only the anchors this storyline uses get a poetic tail. Labels sit clear of their dot.
+  const lastLabel = payload.labelLast.trim()
+    ? `${payload.labelLast.trim()} ↓`
+    : `last commit · ${formatClock(facts.lastCommitAt)} ↓`;
+  const lastLabelY = lastDot ? Math.max(lastDot.y - 20, box.y + 14) : 0;
+
   if (firstDot) {
     const tail = payload.labelFirst.trim();
     const label = `${formatClock(facts.firstCommitAt)} · ${formatDay(facts.firstCommitAt)}${tail ? ` — ${tail}` : ''}`;
     parts.push(
       text(label, {
         x: clampX(firstDot.x + 12, label.length * 6, 'start'),
-        y: Math.max(firstDot.y - 16, box.y + 12),
+        y: Math.max(firstDot.y - 18, box.y + 14),
         size: 10,
         family: MONO,
         fill: '#cbc8bf',
         spacing: 0.4,
+        halo: true,
       }),
     );
   }
 
   if (pivotDot && payload.labelPivot.trim()) {
-    const label = payload.labelPivot.trim();
+    // The pivot and the last commit crowd together on a repo that came back and kept going.
+    // Lift the pivot label clear rather than stacking two lines of 10px type on each other.
+    const crowded = lastDot !== null && Math.abs(pivotDot.x - lastDot.x) < 180;
+    const y = crowded
+      ? Math.min(lastLabelY - 15, pivotDot.y - 20)
+      : Math.max(pivotDot.y - 20, box.y + 14);
+
     parts.push(
-      text(label, {
+      text(payload.labelPivot.trim(), {
         x: pivotDot.x,
-        y: Math.max(pivotDot.y - 18, box.y + 12),
+        y: Math.max(y, box.y + 14),
         size: 10,
         family: MONO,
         fill: '#cbc8bf',
         spacing: 0.4,
         anchor: 'middle',
+        halo: true,
       }),
     );
   }
 
   if (lastDot) {
-    const tail = payload.labelLast.trim();
-    const label = tail ? `${tail} ↓` : `last commit · ${formatClock(facts.lastCommitAt)} ↓`;
     parts.push(
-      text(label, {
-        x: clampX(lastDot.x + 10, label.length * 6, 'end'),
-        y: Math.max(lastDot.y - 18, box.y + 12),
+      text(lastLabel, {
+        x: clampX(lastDot.x + 10, lastLabel.length * 6, 'end'),
+        y: lastLabelY,
         size: 10,
         family: MONO,
         fill: accent,
         spacing: 0.4,
         anchor: 'end',
+        halo: true,
       }),
     );
   }

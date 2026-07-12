@@ -52,18 +52,53 @@ If the card would work equally well as a bar chart, it has failed.
 
 ## User flow
 
-1. User enters a repo. The client normalizes the slug and rejects a malformed one before any request.
-2. The client reads `GET /api/state/{owner}/{repo}` **first**.
-3. `ready` → render the cached card immediately. `POST /api/generate` is never called.
-4. A settled `failed` state with a terminal error code also stops here — retrying it would only re-buy the same failure.
-5. Otherwise the client calls `POST /api/generate` **once**. Cloud Run claims a daily-quota slot and a `generating` marker, then enqueues.
-6. The user can wait or leave.
-7. Cloud Tasks calls `/internal/generate`. Snowflake returns the card payload; Cloud Run renders the SVG and writes it to the bucket (or records `failed`).
-8. The client polls state every 2.5s until it settles, and gives up displaying progress after five minutes — the job itself is unaffected.
-9. Returning to `/{owner}/{repo}` finds the existing card and renders it.
-10. User copies the card image URL or the README embed.
+Read state before spending anything. The expensive path is entered only on a genuine miss.
 
-The browser tab must not be required for generation to complete. If it is, the app is a loading spinner wearing a trench coat.
+```mermaid
+flowchart TD
+    accTitle: User flow
+    accDescr: The user enters a repo and the client validates the slug locally. It then reads job state before doing anything else. A ready card renders straight from the bucket. A terminally failed repo stops without retrying. Only a genuine miss posts to generate, which claims quota and enqueues durable work. The user may leave; polling only drives the display, never the job.
+
+    ENTER["User enters owner/repo"]
+    SLUG{"valid slug?"}
+    REJECT["rejected in the browser<br/>no request made"]
+    STATE["GET /api/state"]
+
+    READY{"card in the bucket?"}
+    RENDER["render the cached card<br/>Snowflake is never called"]
+    COPY["copy the image URL<br/>or the README embed"]
+
+    DEAD{"failed, and terminal?"}
+    STOP["show the failure<br/>no retry offered"]
+
+    GEN["POST /api/generate<br/>once"]
+    QUOTA{"daily quota left?"}
+    CAP["429, budget spent for today"]
+    CLAIM["claim generating, enqueue"]
+
+    LEAVE["user may close the tab"]
+    WORK["Cloud Tasks, Snowflake, render, write"]
+    POLL["poll every 2.5s"]
+
+    ENTER --> SLUG
+    SLUG -->|"no"| REJECT
+    SLUG -->|"yes"| STATE --> READY
+    READY -->|"yes"| RENDER --> COPY
+    READY -->|"no"| DEAD
+    DEAD -->|"yes"| STOP
+    DEAD -->|"no"| GEN --> QUOTA
+    QUOTA -->|"no"| CAP
+    QUOTA -->|"yes"| CLAIM
+    CLAIM --> WORK
+    CLAIM --> POLL
+    POLL -->|"still generating"| POLL
+    POLL -->|"settled"| READY
+    CLAIM -.-> LEAVE
+    LEAVE -.->|"return later to the same URL"| STATE
+    WORK -->|"writes the card, or a failed marker"| READY
+```
+
+**Polling drives the display, not the job.** The client gives up _showing_ progress after five minutes; the work is unaffected. The browser tab must not be required for generation to complete — if it is, the app is a loading spinner wearing a trench coat.
 
 ### Job state
 

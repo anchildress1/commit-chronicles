@@ -5,6 +5,12 @@ import { QuotaExceededError, fetchState, requestGeneration, type JobState } from
 const POLL_MS = 2500;
 /** A generation that has not landed in five minutes is not going to. */
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * Consecutive failed reads before the page calls it: the API restarting, a proxy hiccup, a
+ * dropped packet. Reading state is free and the job outlives this page, so one refused read
+ * is a blip — treating it as terminal reports a failure for a job that is still running.
+ */
+const MAX_READ_FAILURES = 4;
 
 export interface Job {
   state: JobState | null;
@@ -61,44 +67,69 @@ export function useJob(slug: RepoSlug | null): Job {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const startedAt = Date.now();
+    let readFailures = 0;
 
     const publish = (next: Omit<Tracked, 'forSlug'>): void => {
       // Tagged with its slug, so a late response can never paint the wrong repo's card.
       if (alive()) setTracked({ forSlug: slug.slug, ...next });
     };
 
-    const poll = async (): Promise<void> => {
-      try {
-        const next = await fetchState(slug);
-        if (!alive()) return;
-
-        publish({ state: next, error: null });
-        if (settled(next)) return;
-
-        if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-          publish({
-            state: next,
-            error: 'This one is taking longer than it should. Reload to check on it.',
-          });
-          return;
-        }
-
-        timer = setTimeout(() => void poll(), POLL_MS);
-      } catch (cause) {
-        publish({ state: null, error: describe(cause) });
+    /**
+     * Ride out a refused read, keeping whatever the page is already showing. The state is
+     * only wiped once the reads have failed enough times to mean something.
+     */
+    const survive = (cause: unknown, again: () => void): void => {
+      readFailures += 1;
+      if (readFailures < MAX_READ_FAILURES) {
+        timer = setTimeout(again, POLL_MS);
+        return;
       }
+      publish({ state: null, error: describe(cause) });
+    };
+
+    const poll = async (): Promise<void> => {
+      let next: JobState;
+      try {
+        next = await fetchState(slug);
+      } catch (cause) {
+        if (alive()) survive(cause, () => void poll());
+        return;
+      }
+      if (!alive()) return;
+      readFailures = 0;
+
+      publish({ state: next, error: null });
+      if (settled(next)) return;
+
+      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        publish({
+          state: next,
+          error: 'This one is taking longer than it should. Reload to check on it.',
+        });
+        return;
+      }
+
+      timer = setTimeout(() => void poll(), POLL_MS);
     };
 
     const attach = async (): Promise<void> => {
+      let existing: JobState;
       try {
-        const existing = await fetchState(slug);
-        if (!alive()) return;
+        existing = await fetchState(slug);
+      } catch (cause) {
+        if (alive()) survive(cause, () => void attach());
+        return;
+      }
+      if (!alive()) return;
+      readFailures = 0;
 
-        if (settled(existing) && !force) {
-          publish({ state: existing, error: null });
-          return;
-        }
+      if (settled(existing) && !force) {
+        publish({ state: existing, error: null });
+        return;
+      }
 
+      try {
+        // Asking to generate spends money and is not a read, so it is never retried blindly.
         const started = await requestGeneration(slug);
         if (!alive()) return;
 

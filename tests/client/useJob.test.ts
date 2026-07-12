@@ -134,9 +134,88 @@ describe('useJob', () => {
 
     const { result } = renderHook(() => useJob(SLUG));
 
-    await waitFor(() => {
-      expect(result.current.error).toMatch(/could not be read just now/);
+    // Reads are retried before the page calls it, so the clock has to reach the last one.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4 * 2500);
     });
+
+    expect(result.current.error).toMatch(/could not be read just now/);
+  });
+
+  it('rides out a single refused read instead of failing a job that is still running', async () => {
+    // The API restarting under `make dev` refuses the poll that is already in flight. Calling
+    // that a failure reports a dead job while it is busy succeeding.
+    let attempts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/generate') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ status: 'generating', repo: 'atlas/pipeline' }), {
+              status: 202,
+            }),
+          );
+        }
+        attempts += 1;
+        if (attempts === 1) return Promise.reject(new Error('ECONNREFUSED'));
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: 'ready', repo: 'atlas/pipeline' }), {
+            status: 200,
+          }),
+        );
+      }),
+    );
+
+    const { result } = renderHook(() => useJob(SLUG));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+
+    await waitFor(() => {
+      expect(result.current.state?.status).toBe('ready');
+    });
+    expect(result.current.error).toBeNull();
+  });
+
+  it('keeps showing the job while a read is merely blipping', async () => {
+    let reads = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/generate') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ status: 'generating', repo: 'atlas/pipeline' }), {
+              status: 202,
+            }),
+          );
+        }
+        reads += 1;
+        // The first read attaches; every later poll is refused.
+        if (reads === 1) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ status: 'unknown', repo: 'atlas/pipeline' }), {
+              status: 200,
+            }),
+          );
+        }
+        return Promise.reject(new Error('ECONNREFUSED'));
+      }),
+    );
+
+    const { result } = renderHook(() => useJob(SLUG));
+
+    await waitFor(() => {
+      expect(result.current.state?.status).toBe('generating');
+    });
+
+    // Two refused polls is not yet a verdict: the page still shows the running job.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * 2500);
+    });
+
+    expect(result.current.state?.status).toBe('generating');
+    expect(result.current.error).toBeNull();
   });
 
   it('does not re-run a cached failure on its own', async () => {

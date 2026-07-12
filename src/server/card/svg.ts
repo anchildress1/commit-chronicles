@@ -183,11 +183,13 @@ export function renderCard(payload: CardPayload): string {
 
   // The attribution is right-anchored on the same row, so the reason gets what is left of it
   // and shrinks rather than running underneath it.
+  // Sized like the caption it sits under, not like a footnote: the card is displayed
+  // scaled down, and at 13px this line rendered around 9px on screen — present, unreadable.
   const reasonSize = fitOneLine(
     payload.accentReason.trim(),
     'sans',
     CARD.width - 120 - attributionWidth() - 24,
-    [13, 12, 11, 10, 9],
+    [16, 15, 14, 13, 12],
   );
 
   const parts: string[] = [];

@@ -124,11 +124,13 @@ body {
 }
 
 .stage--result {
-  /* Cap the card by HEIGHT as well as width: 1200x630 means 52dvh of height needs ~99dvh
-     of width, so without this the card alone can outgrow a short viewport and push the
-     actions off the bottom. */
-  --card-width: min(1060px, 100%, 88dvh);
-  max-width: 1140px;
+  /* The card is the product, so it takes every pixel that is going: the width of the stage,
+     capped only by what is actually left once the chrome above and below it is paid for.
+     390px is that chrome — nav, address, buttons, embed, footer — and 1.9 turns the leftover
+     height back into a width at the card's own 1200x630 ratio. Guess at this and the card
+     either shrinks for no reason or shoves the buttons off the bottom. */
+  --card-width: min(1440px, 100%, calc((100dvh - 390px) * 1.9));
+  max-width: 1520px;
   padding: 1.5vh 40px 2vh;
   text-align: center;
 }

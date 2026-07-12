@@ -5,10 +5,19 @@
 # The project resources this expects (bucket, Artifact Registry repo, service accounts,
 # Secret Manager entry, Cloud Tasks queue) are created once by `make gcp-bootstrap`.
 #
-# Secrets never appear here. SNOWFLAKE_PAT is mounted from Secret Manager at run time;
-# .env is for local development only and is not read by this script.
+# Config comes from .env; SNOWFLAKE_PAT comes from Secret Manager and is mounted at run
+# time. No secret value is ever passed on a gcloud command line, where it would land in
+# shell history and the audit log.
 
 set -euo pipefail
+
+# Sourced here, not by the caller, so the script behaves the same run bare or run by make.
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
 
 PROJECT="${PROJECT:-anchildress1}"
 REGION="${REGION:-us-east1}"

@@ -61,6 +61,7 @@ export const CARD: CardPayload = {
     firstCommitAt: ts('2025-12-06T17:10:00'),
     firstCommitSubject: 'init',
     lastCommitAt: ts('2026-02-25T03:53:00'),
+    windowed: false,
     lastCommitSubject: 'fix: rp my release please token readonly',
     largestGap: {
       days: 38,

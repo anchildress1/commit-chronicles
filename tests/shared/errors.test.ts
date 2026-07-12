@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isRetryable } from '../../src/shared/errors.js';
 
 describe('isRetryable', () => {
-  it.each(['repo_not_found', 'repo_private', 'repo_empty', 'repo_oversized', 'no_commits'])(
+  it.each(['repo_not_found', 'repo_private', 'repo_empty', 'invalid_repo_slug', 'no_commits'])(
     '%s is the repository’s answer, and asking again cannot change it',
     (errorCode) => {
       expect(isRetryable(errorCode)).toBe(false);

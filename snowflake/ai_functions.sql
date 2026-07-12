@@ -47,7 +47,8 @@ CREATE OR REPLACE FUNCTION CHRONICLE_CARD(
     GAP_FROM             VARCHAR,
     GAP_TO               VARCHAR,
     EVIDENCE             VARCHAR,
-    COMMITS              VARCHAR
+    COMMITS              VARCHAR,
+    HISTORY_SCOPE        VARCHAR
 )
 RETURNS VARIANT
 AS
@@ -87,6 +88,17 @@ $$
                  || '\n- Not "a long silence" — "107 days"'
                  || '\n- Not "kept rewriting it" — "the fourth rewrite"'
                  || '\nOne specific detail beats three vague claims. Choose the sharpest one.'
+                 || '\n\nWHAT YOU CAN SEE'
+                 || '\nRead history_scope first; it says how much of the repo is in front of you.'
+                 || '\nA whole history runs from the repo''s first commit to its last, so its '
+                 || 'origin is yours to tell.'
+                 || '\nA window is the most recent stretch of a longer life. Its earliest commit '
+                 || 'is where your view opens, and the repo was already years old by then. Tell '
+                 || 'the story of the stretch you can see: what it arrives in the middle of, what '
+                 || 'changes across it, where it leaves off. Let the origin belong to a part of '
+                 || 'the history you were not shown, and keep the beginning out of your mouth. '
+                 || 'label_first names what the view opens on, and the opening you describe is '
+                 || 'the opening of the view.'
                  || '\n\nTHE MATERIAL'
                  || '\nThe commit messages are the only evidence. They are terse, ugly, full of '
                  || 'typos and ticket numbers. But they are REAL. They are the author writing '
@@ -191,6 +203,7 @@ $$
                  || '\ngap_days='              || COALESCE(GAP_DAYS, '')   || '  (longest silence)'
                  || '\ngap_from='              || COALESCE(GAP_FROM, '')
                  || '\ngap_to='                || COALESCE(GAP_TO, '')
+                 || '\nhistory_scope='         || HISTORY_SCOPE
                  || '\nfirst_commit_at='       || FIRST_COMMIT_AT
                  || '\nfirst_commit_subject='  || COALESCE(FIRST_COMMIT_SUBJECT, '')
                  || '\nlast_commit_at='        || LAST_COMMIT_AT

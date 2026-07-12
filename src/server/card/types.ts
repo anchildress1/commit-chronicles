@@ -26,6 +26,8 @@ export interface CardFacts {
   firstCommitSubject: string;
   lastCommitAt: string;
   lastCommitSubject: string;
+  /** True when the history was longer than the ingest cap and only its newest slice was read. */
+  windowed: boolean;
   largestGap: LargestGap | null;
 }
 

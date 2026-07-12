@@ -79,9 +79,19 @@ const STATUS_VERB: Record<RepoStatus, string> = {
  *
  * Composed from facts alone — Cortex has no say in it.
  */
-export function headerMeta(commitCount: number, status: RepoStatus, lastCommitAt: string): string {
+export function headerMeta(
+  commitCount: number,
+  status: RepoStatus,
+  lastCommitAt: string,
+  windowed = false,
+): string {
   const plural = commitCount === 1 ? 'commit' : 'commits';
-  return `${commitCount} ${plural} · ${STATUS_VERB[status]} ${formatDay(lastCommitAt)}`;
+  // A windowed card counts the slice it was drawn from, so it says which slice. Without this
+  // the number reads as the repo's whole life, and for a big repo that is simply false.
+  const count = windowed
+    ? `last ${String(commitCount)} ${plural}`
+    : `${String(commitCount)} ${plural}`;
+  return `${count} · ${STATUS_VERB[status]} ${formatDay(lastCommitAt)}`;
 }
 
 /** The fixed disclosure. The renderer owns this sentence, not Cortex. */

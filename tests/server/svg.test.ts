@@ -59,6 +59,13 @@ describe('renderCard', () => {
     expect(renderCard(CARD)).toContain('59 COMMITS · ABANDONED SINCE FEB 25');
   });
 
+  it('says so when the card was drawn from a window of a longer history', () => {
+    // Printing a bare count for a slice claims the repo's whole life is 59 commits long. For a
+    // repo with 40,000 of them, the header would be the one number on the card that is false.
+    const windowed = cardWith({ facts: { ...CARD.facts, windowed: true } });
+    expect(renderCard(windowed)).toContain('LAST 59 COMMITS ·');
+  });
+
   it('draws the void panel with the observed gap', () => {
     const svg = renderCard(CARD);
     expect(svg).toContain('38 days dark');

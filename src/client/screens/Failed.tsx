@@ -19,8 +19,8 @@ interface FailureCopy {
 /**
  * Every error code the pipeline can emit, said out loud.
  *
- * A code with no entry here falls back to copy that blames the repository's name, which for
- * a failure like `repo_oversized` sends the reader off to re-check a name that was correct.
+ * A code with no entry here falls back to copy that blames the repository's name, and sends a
+ * reader off to re-check a name that was never the problem.
  */
 export const FAILURE_COPY: Record<string, FailureCopy> = {
   repo_not_found: {
@@ -35,11 +35,6 @@ export const FAILURE_COPY: Record<string, FailureCopy> = {
   repo_empty: {
     headline: 'It never drew breath.',
     explain: 'The repository exists, but there is not a single commit in it.',
-  },
-  repo_oversized: {
-    headline: 'That history is too big to read.',
-    explain:
-      'The repository is real and public — there is just more history in it than this service will ingest. Nothing is wrong with the name. Try a smaller repository.',
   },
   invalid_repo_slug: {
     headline: 'That is not a repository.',

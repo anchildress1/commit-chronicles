@@ -33,6 +33,19 @@ CREATE TABLE IF NOT EXISTS COMMITS (
 );
 ALTER TABLE COMMITS ADD COLUMN IF NOT EXISTS AUTHOR_LOGIN STRING;
 
+-- How the history was read. A repo past the cap is not refused — the newest COMMIT_CAP
+-- commits are ingested and WINDOWED says so, because a card drawn from a slice must never
+-- claim the repo began where the slice does. Repo-level, not per-commit: READ_REPO skips
+-- ingest entirely when the commits are already here, so the flag has to outlive the call
+-- that discovered it.
+CREATE TABLE IF NOT EXISTS REPO_INGEST (
+  REPO_OWNER  STRING       NOT NULL,
+  REPO_NAME   STRING       NOT NULL,
+  WINDOWED    BOOLEAN      DEFAULT FALSE,
+  COMMIT_CAP  NUMBER,
+  INGESTED_AT TIMESTAMP_TZ
+);
+
 -- Lives here, not in read_repo.sql: a CREATE OR REPLACE there dropped every generated
 -- card on each deploy of the procedure. The gallery is meant to be pre-generated, and
 -- regenerating it costs a Cortex call per card. Change the card contract and you drop

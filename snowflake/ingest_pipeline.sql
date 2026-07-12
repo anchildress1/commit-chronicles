@@ -137,8 +137,21 @@ def run(session, repo_owner, repo_name, max_commits, ref=None):
 
     if not rows:
         return {"status": "failed", "errorCode": "repo_empty", "repo": repo_slug}
-    if len(rows) > max_commits:
-        return {"status": "failed", "errorCode": "repo_oversized", "repo": repo_slug, "commitCap": max_commits}
+
+    # One over the cap means there is more history than we read. Keep the newest max_commits
+    # (GitHub returns them newest-first) and record that this is a window, not the whole life
+    # of the repo. Refusing here instead would reject every repo anyone has actually heard of.
+    windowed = len(rows) > max_commits
+    rows = rows[:max_commits]
+
+    session.table("REPO_INGEST").delete(
+        (col("REPO_OWNER") == repo_owner) & (col("REPO_NAME") == repo_name)
+    )
+    session.sql(
+        "INSERT INTO REPO_INGEST (REPO_OWNER, REPO_NAME, WINDOWED, COMMIT_CAP, INGESTED_AT) "
+        "SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP()",
+        params=[repo_owner, repo_name, windowed, max_commits],
+    ).collect()
 
     session.table("COMMITS").delete(
         (col("REPO_OWNER") == repo_owner) & (col("REPO_NAME") == repo_name)

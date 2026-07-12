@@ -199,7 +199,7 @@ export function renderCard(payload: CardPayload): string {
       fill: INK,
       weight: 600,
     }),
-    text(headerMeta(facts.commitCount, payload.statusLabel, facts.lastCommitAt), {
+    text(headerMeta(facts.commitCount, payload.statusLabel, facts.lastCommitAt, facts.windowed), {
       x: CARD.width - 60,
       y: 76,
       size: 13,

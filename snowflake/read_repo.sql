@@ -237,7 +237,14 @@ BEGIN
                                e.FACTS:largestGap:from::STRING,
                                e.FACTS:largestGap:to::STRING,
                                TO_JSON(e.EVIDENCE),
-                               TO_JSON(e.COMMITS)
+                               TO_JSON(e.COMMITS),
+                               IFF(
+                                   e.FACTS:windowed::BOOLEAN,
+                                   'a window — the most recent ' || e.FACTS:commitCount::STRING
+                                       || ' commits of a longer history, which was already '
+                                       || 'running before the earliest commit you can see',
+                                   'the whole history — the repo''s first commit through its last'
+                               )
                            )
         )
       INTO :card

@@ -43,8 +43,15 @@ function emittedErrorCodes(): string[] {
 describe('failure copy', () => {
   it('finds the codes it is supposed to be checking', () => {
     const codes = emittedErrorCodes();
-    expect(codes).toContain('repo_oversized');
+    expect(codes).toContain('repo_not_found');
     expect(codes.length).toBeGreaterThan(3);
+  });
+
+  it('no longer refuses a repo for being too big', () => {
+    // A large history is windowed, not rejected. The code is gone from the pipeline, so the
+    // page must not still be carrying words for it.
+    expect(emittedErrorCodes()).not.toContain('repo_oversized');
+    expect(FAILURE_COPY['repo_oversized']).toBeUndefined();
   });
 
   it('has words for every code the pipeline emits', () => {
@@ -61,13 +68,13 @@ describe('failure copy', () => {
   });
 
   it('never tells the reader to re-check a name that was right', () => {
-    // repo_oversized means the name was correct and the repo was simply too big. Sending the
-    // reader back to the spelling is the fallback copy, and it is a lie.
-    expect(FAILURE_COPY['repo_oversized']?.explain).not.toMatch(/check the owner/i);
+    // Only a failure that really is about the name may send the reader back to the name.
+    expect(FAILURE_COPY['repo_private']?.explain).not.toMatch(/check the owner/i);
+    expect(FAILURE_COPY['no_commits']?.explain).not.toMatch(/check the owner/i);
   });
 
   it('offers no retry for a failure that will answer the same way forever', () => {
-    expect(isRetryable('repo_oversized')).toBe(false);
+    expect(isRetryable('repo_not_found')).toBe(false);
     expect(isRetryable('invalid_repo_slug')).toBe(false);
   });
 

@@ -102,7 +102,7 @@ describe('start', () => {
     expect(queue.enqueued).toHaveLength(1);
   });
 
-  it.each(['repo_not_found', 'repo_private', 'repo_empty', 'repo_oversized', 'no_commits'])(
+  it.each(['repo_not_found', 'repo_private', 'repo_empty', 'invalid_repo_slug', 'no_commits'])(
     'never re-runs a %s failure — the answer cannot change',
     async (errorCode) => {
       const { generator, store, queue, snowflake } = harness(() => CARD);

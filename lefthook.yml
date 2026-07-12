@@ -6,14 +6,40 @@ commit-msg:
 pre-commit:
   parallel: true
   jobs:
+    - name: format
+      glob: '*.{ts,tsx,js,json,css,md,yml,yaml}'
+      run: npx --no-install prettier --write {staged_files}
+      stage_fixed: true
+
+    - name: lint
+      glob: '*.{ts,tsx,js}'
+      run: npx --no-install eslint --max-warnings=0 {staged_files}
+
     # actionlint is a Go binary, installed via brew. The npm package is a third-party
     # wasm repackage, so it is not a dependency here. Skip loudly rather than break a
     # commit for anyone who has not installed it; CodeQL still scans workflows in CI.
     - name: actionlint
-      glob: ".github/workflows/*.yml"
+      glob: '.github/workflows/*.yml'
       run: |
         if ! command -v actionlint >/dev/null 2>&1; then
           echo "actionlint not found — skipping workflow lint (brew install actionlint)"
           exit 0
         fi
         actionlint {staged_files}
+
+    - name: secret-scan
+      run: |
+        if ! command -v gitleaks >/dev/null 2>&1; then
+          echo "gitleaks not found — skipping secret scan (brew install gitleaks)"
+          exit 0
+        fi
+        gitleaks protect --staged --no-banner --redact
+
+pre-push:
+  parallel: true
+  jobs:
+    - name: typecheck
+      run: npm run typecheck
+
+    - name: test
+      run: npm test

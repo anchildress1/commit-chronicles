@@ -1,0 +1,29 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    # A version published minutes ago has had no time to be caught. Wait a week before
+    # proposing it — supply-chain compromises are usually yanked well inside that window.
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
+
+  # Thursday, so the two ecosystems' PRs rarely land on top of each other.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: thursday
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ['*']

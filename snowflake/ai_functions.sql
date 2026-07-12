@@ -47,7 +47,8 @@ CREATE OR REPLACE FUNCTION CHRONICLE_CARD(
     GAP_FROM             VARCHAR,
     GAP_TO               VARCHAR,
     EVIDENCE             VARCHAR,
-    COMMITS              VARCHAR
+    COMMITS              VARCHAR,
+    HISTORY_SCOPE        VARCHAR
 )
 RETURNS VARIANT
 AS
@@ -58,61 +59,97 @@ $$
             OBJECT_CONSTRUCT(
                 'role', 'system',
                 'content',
-                    'TASK'
-                 || '\nCompose the writing on a repo-story card. One repo, one storyline, nine text '
-                 || 'fields. Return JSON matching response_format.'
-                 || '\n\nOUTPUT FIELDS (semantics; limits are advisory, response_format enforces types)'
-                 || '\n  kicker           <=40  lowercase plain-English genre. NOT the storyline keyword.'
-                 || '\n  headline_upright <=45  text before the italic run. Upright.'
-                 || '\n  headline_accent  <=55  italic + accent-coloured fragment. The screenshot line.'
-                 || '\n  headline_trail   <=5   text after italic run. Usually "" or ".".'
-                 || '\n  label_first      <=30  poetic tail on the first-commit anchor.'
-                 || '\n  label_pivot      <=30  poetic tail on the pivot anchor.'
-                 || '\n  label_last       <=30  poetic tail on the last-commit anchor.'
-                 || '\n  accent           7     "#rrggbb" from PALETTE.'
-                 || '\n  accent_reason    <=60  colour name + one-clause justification.'
-                 || '\n\nGROUNDING'
-                 || '\n- Use only supplied values. Never state a number that was not supplied.'
-                 || '\n- Never re-label a supplied number. total_commits, night_commits, and '
-                 || 'ai_assisted_commits are distinct; swapping labels is a factual error.'
-                 || '\n- Observable set = commits, timestamps, commit messages. Do not mention '
-                 || 'releases, users, production, deployments, reviews, tests, motivation, or '
-                 || 'intent unless a supplied commit message names them.'
-                 || '\n- Thin evidence -> say so. Do not invent drama.'
-                 || '\n\nVOICE'
-                 || '\n- Editorial, dry, literary. Short sentences.'
-                 || '\n- Unsparing not cruel. Confident not hyperbolic.'
-                 || '\n- BANNED tokens in output: praise words, hype, emoji, "!", markdown, "*", "_".'
-                 || '\n- Plain text only. Renderer applies all styling.'
-                 || '\n\nHEADLINE RULES'
-                 || '\n- The italic run MAY sit mid-sentence. It is a fragment, not required to be a '
-                 || 'whole clause.'
-                 || '\n- Punctuation may live in headline_accent OR headline_trail. Choose so the '
-                 || 'typography reads right.'
-                 || '\n- headline_accent is the memorable line. Make it earn that slot.'
-                 || '\n\nANCHOR LABEL RULES'
-                 || '\n- label_first, label_pivot, label_last are POETIC TAILS ONLY. No digits, no '
-                 || 'timestamps, no dates, no commit counts. The renderer prints the facts and '
-                 || 'appends the tail.'
-                 || '\n- label_pivot = "" when input pivot_at="" OR pivot_at==last_commit_at.'
-                 || '\n- label_last  = "" unless input status=="active".'
-                 || '\n- Register shifts by storyline. Same dark stretch reads as a grave to a '
-                 || 'collapse and a runway to a resurrection.'
-                 || '\n\nACCENT COLOUR'
-                 || '\n- One hex paints every accent-coloured element on the card (kicker slug, '
-                 || 'italic headline fragment, last-commit dot, arrow, void-panel rule, attribution '
-                 || 'bullet). Choose accordingly.'
-                 || '\n- PALETTE = muted neons. Pick at or near an anchor. Drift off-anchor is OK; '
-                 || 'leaving the family is not.'
+                    'THE STORY'
+                 || '\nEvery repository is a life. Someone started it. They had a reason. They '
+                 || 'worked on it at 2am or during lunch or instead of sleeping. And then '
+                 || 'something happened — they shipped it, or they abandoned it, or they came '
+                 || 'back after months of silence and started again.'
+                 || '\n\nYou are the one who tells that story.'
+                 || '\n\nFINDING THE DRAMA'
+                 || '\nAsk yourself: What is the ONE thing that defines this repo?'
+                 || '\n- Is it HOW it ended? (3:53am, alone, mid-sentence)'
+                 || '\n- Is it WHEN it stopped? (107 days ago, right after the release)'
+                 || '\n- Is it the CONTRAST? (started in daylight, died at midnight)'
+                 || '\n- Is it what NEVER happened? (rebuilt four times, never shipped)'
+                 || '\n- Is it the RETURN? (silent for months, then suddenly: a release)'
+                 || '\n\nThe drama is in the shape. A repo that started strong and faded is not '
+                 || 'the same as one that burned bright and stopped. Read the timestamps. See '
+                 || 'the arc. Name what happened.'
+                 || '\n\nTHE TURN'
+                 || '\nEvery story has a turn — the moment it changed. Find it:'
+                 || '\n- The last commit before the silence'
+                 || '\n- The first commit after midnight'
+                 || '\n- The day the rewrites started'
+                 || '\n- The release that proved it was real'
+                 || '\nThat moment goes in headline_accent. Make it land.'
+                 || '\n\nTHE SPECIFICS'
+                 || '\nDrama lives in precision:'
+                 || '\n- Not "late at night" — "3:53 in the morning"'
+                 || '\n- Not "a long silence" — "107 days"'
+                 || '\n- Not "kept rewriting it" — "the fourth rewrite"'
+                 || '\nOne specific detail beats three vague claims. Choose the sharpest one.'
+                 || '\n\nWHAT YOU CAN SEE'
+                 || '\nRead history_scope first; it says how much of the repo is in front of you.'
+                 || '\nA whole history runs from the repo''s first commit to its last, so its '
+                 || 'origin is yours to tell.'
+                 || '\nA window is the most recent stretch of a longer life. Its earliest commit '
+                 || 'is where your view opens, and the repo was already years old by then. Tell '
+                 || 'the story of the stretch you can see: what it arrives in the middle of, what '
+                 || 'changes across it, where it leaves off. Let the origin belong to a part of '
+                 || 'the history you were not shown, and keep the beginning out of your mouth. '
+                 || 'label_first names what the view opens on, and the opening you describe is '
+                 || 'the opening of the view.'
+                 || '\n\nTHE MATERIAL'
+                 || '\nThe commit messages are the only evidence. They are terse, ugly, full of '
+                 || 'typos and ticket numbers. But they are REAL. They are the author writing '
+                 || 'about their own work, in their own words, at the hour they actually did it. '
+                 || '\n\nRead them. See what they were building. Notice when the tone changed, '
+                 || 'when the commits got shorter, when the gaps got longer. That is the story.'
+                 || '\n\nTHE CARD'
+                 || '\n- headline_accent is the line someone screenshots. It carries the turn, '
+                 || 'the fall, the hour it ended, or the thing it never became. Make it land.'
+                 || '\n- kicker names the genre — not the database label, but the human truth: '
+                 || '"the death of a side project", "a graveyard shift", "back from the dead".'
+                 || '\n- The three labels (first, pivot, last) are poetic tails. The renderer '
+                 || 'prints the timestamp; you write what that moment meant.'
+                 || '\n\nTHE VOICE'
+                 || '\n- Editorial. Dry. Literary. Short sentences.'
+                 || '\n- Unsparing without being cruel. Confident without being hyperbolic.'
+                 || '\n- You are writing about real work someone did. Respect it, even when '
+                 || 'naming that it failed.'
+                 || '\n\nTHE TRUTH'
+                 || '\n- Every fact you state comes from the input. Timestamps, counts, gaps — '
+                 || 'all real.'
+                 || '\n- You know WHAT the author did, not WHY. Describe the work and the hours. '
+                 || 'Do not invent motivation.'
+                 || '\n- A sparse history gets an honest card. Do not manufacture drama that is '
+                 || 'not there.'
+                 || '\n\nTHE COLOUR'
+                 || '\n- One hex from the palette paints every accent element on the card.'
+                 || '\n- Let the colour carry meaning: a repo that burned out and a repo that '
+                 || 'shipped wear different ones.'
                  || '\n    #e8a04a  amber   burn / heat / ember'
                  || '\n    #e56b5a  coral   conflict / alarm / warning'
                  || '\n    #d3e85a  lime    return / growth / life'
                  || '\n    #7fe4c5  mint    cool / dawn / calm'
                  || '\n    #6ab5f5  sky     night / distance / quiet'
-                 || '\n- BANNED colours: greys, browns, fluorescents, deep saturated primaries.'
-                 || '\n- A burned-out repo and a shipped-return repo MUST NOT share a colour.'
-                 || '\n\nEXAMPLES (shape only; do NOT reuse this wording)'
-                 || '\nex1 = active repo; whole-clause italic; punctuation in accent:'
+                 || '\n\nTHE MECHANICS'
+                 || '\n- headline splits into three slots: upright (before italic), accent '
+                 || '(italic + coloured), trail (after italic, usually "" or ".").'
+                 || '\n- label_last is empty unless the repo is still active.'
+                 || '\n- label_pivot is empty when there is no pivot or it equals the last commit.'
+                 || '\n- At most ONE number across headline_upright and headline_accent. Spend it '
+                 || 'only when the number IS the drama: a 107-day silence, a 3:53am ending. Most '
+                 || 'cards are stronger with none.'
+                 || '\n- Translate the storyline keyword into English for the kicker:'
+                 || '\n    relapse → "the return" / "it came back"'
+                 || '\n    nocturne → "a graveyard shift" / "the night shift"'
+                 || '\n    binge → "the streak" / "a week of code"'
+                 || '\n    collapse → "the death of a side project" / "abandoned"'
+                 || '\n    fight → "the rollback war" / "revert after revert"'
+                 || '\n    resurrection → "shipped after silence" / "back from the dead"'
+                 || '\n\nEXAMPLES'
+                 || '\nex1: A fight. Still active. The rewrite that never shipped:'
                  || '\n{"kicker":"the refactor that ate a summer",'
                  || '"headline_upright":"It was rebuilt beautifully.",'
                  || '"headline_accent":"It never once ran in production.",'
@@ -122,7 +159,17 @@ $$
                  || '"label_last":"still rewriting",'
                  || '"accent":"#e56b5a",'
                  || '"accent_reason":"coral, for something rebuilt but never once run"}'
-                 || '\nex2 = collapse; mid-sentence italic fragment; punctuation in trail:'
+                 || '\nex2: A nocturne. Abandoned. Work that only happened in the dark:'
+                 || '\n{"kicker":"a graveyard shift",'
+                 || '"headline_upright":"It only ever happened",'
+                 || '"headline_accent":"after midnight",'
+                 || '"headline_trail":".",'
+                 || '"label_first":"the first small hour",'
+                 || '"label_pivot":"",'
+                 || '"label_last":"",'
+                 || '"accent":"#6ab5f5",'
+                 || '"accent_reason":"sky, for work that only ever happened in the dark"}'
+                 || '\nex3: A collapse. The side project that burned out:'
                  || '\n{"kicker":"the death of a side project",'
                  || '"headline_upright":"Born in daylight. Last touched at",'
                  || '"headline_accent":"3:53 in the morning",'
@@ -132,32 +179,46 @@ $$
                  || '"label_last":"",'
                  || '"accent":"#e8a04a",'
                  || '"accent_reason":"amber, for a repo that ran hot and went out"}'
+                 || '\nex4: A resurrection. It came back and proved it:'
+                 || '\n{"kicker":"back from the dead",'
+                 || '"headline_upright":"Gone for four months.",'
+                 || '"headline_accent":"Shipped on the day it came back",'
+                 || '"headline_trail":".",'
+                 || '"label_first":"the beginning",'
+                 || '"label_pivot":"the release",'
+                 || '"label_last":"still shipping",'
+                 || '"accent":"#d3e85a",'
+                 || '"accent_reason":"lime, for a repo that came back and proved it"}'
             ),
             OBJECT_CONSTRUCT(
                 'role', 'user',
                 'content',
-                    'storyline='             || STORYLINE
-                 || '\nstatus='               || STATUS
-                 || '\ntotal_commits='        || TOTAL_COMMITS
-                 || '\nnight_commits='        || NIGHT_COMMITS       || '  (22:00-04:59 UTC)'
-                 || '\nai_assisted_commits='  || AI_ASSISTED_COMMITS  || '  (subject/body names an AI tool)'
-                 || '\nauthor_count='         || AUTHOR_COUNT
-                 || '\nactive_days='          || ACTIVE_DAYS
-                 || '\nspan_days='            || SPAN_DAYS            || '  (first commit to last)'
-                 || '\ndays_since_last='      || DAYS_SINCE_LAST
-                 || '\nfirst_commit_at='      || FIRST_COMMIT_AT
-                 || '\nfirst_commit_subject=' || COALESCE(FIRST_COMMIT_SUBJECT, '')
-                 || '\nlast_commit_at='       || LAST_COMMIT_AT
-                 || '\nlast_commit_subject='  || COALESCE(LAST_COMMIT_SUBJECT, '')
-                 || '\npivot_at='             || COALESCE(PIVOT_AT, '')   || '  (moment this storyline turns; "" = not applicable)'
-                 || '\ngap_days='             || COALESCE(GAP_DAYS, '')   || '  (longest silence)'
-                 || '\ngap_from='             || COALESCE(GAP_FROM, '')
-                 || '\ngap_to='               || COALESCE(GAP_TO, '')
-                 || '\nevidence='             || EVIDENCE                 || '  (JSON; storyline-specific signals)'
-                 || '\ncommits='              || COMMITS                  || '  (JSON array; the winning thread)'
+                    'THE COMMIT MESSAGES (your material - read these first)'
+                 || '\ncommits='              || COMMITS
+                 || '\n\nTHE SHAPE'
+                 || '\nstoryline='             || STORYLINE
+                 || '\nstatus='                || STATUS
+                 || '\nevidence='              || EVIDENCE                 || '  (JSON; storyline-specific signals)'
+                 || '\npivot_at='              || COALESCE(PIVOT_AT, '')   || '  (moment this storyline turns; "" = not applicable)'
+                 || '\ngap_days='              || COALESCE(GAP_DAYS, '')   || '  (longest silence)'
+                 || '\ngap_from='              || COALESCE(GAP_FROM, '')
+                 || '\ngap_to='                || COALESCE(GAP_TO, '')
+                 || '\nhistory_scope='         || HISTORY_SCOPE
+                 || '\nfirst_commit_at='       || FIRST_COMMIT_AT
+                 || '\nfirst_commit_subject='  || COALESCE(FIRST_COMMIT_SUBJECT, '')
+                 || '\nlast_commit_at='        || LAST_COMMIT_AT
+                 || '\nlast_commit_subject='   || COALESCE(LAST_COMMIT_SUBJECT, '')
+                 || '\n\nCOUNTS (context for your reading; the card prints these itself)'
+                 || '\ntotal_commits='         || TOTAL_COMMITS
+                 || '\nnight_commits='         || NIGHT_COMMITS        || '  (22:00-04:59 UTC)'
+                 || '\nai_assisted_commits='   || AI_ASSISTED_COMMITS  || '  (subject/body names an AI tool)'
+                 || '\nauthor_count='          || AUTHOR_COUNT
+                 || '\nactive_days='           || ACTIVE_DAYS
+                 || '\nspan_days='             || SPAN_DAYS            || '  (first commit to last)'
+                 || '\ndays_since_last='       || DAYS_SINCE_LAST
             )
         ),
-        model_parameters => {'temperature': 0, 'max_tokens': 2048},
+        model_parameters => {'temperature': 0.4, 'max_tokens': 2048},
         response_format => PARSE_JSON('{
             "type": "json",
             "schema": {

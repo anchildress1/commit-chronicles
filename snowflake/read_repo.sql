@@ -44,6 +44,38 @@ BEGIN
 END;
 $$;
 
+-- The card a repo already has, in the same shape READ_REPO returns. A renderer change
+-- should never cost a Cortex call: the words are already written and paid for.
+CREATE OR REPLACE VIEW CARD_PAYLOAD AS
+SELECT
+    REPO_OWNER,
+    REPO_NAME,
+    OBJECT_CONSTRUCT(
+        'status',          'ready',
+        'repo',            REPO_OWNER || '/' || REPO_NAME,
+        'storyline',       STORYLINE,
+        'score',           SCORE,
+        'statusLabel',     STATUS,
+        'kicker',          KICKER,
+        'headlineUpright', HEADLINE_UPRIGHT,
+        'headlineAccent',  HEADLINE_ACCENT,
+        'headlineTrail',   HEADLINE_TRAIL,
+        'labelFirst',      LABEL_FIRST,
+        'labelPivot',      LABEL_PIVOT,
+        'labelLast',       LABEL_LAST,
+        'accent',          ACCENT,
+        'accentReason',    ACCENT_REASON,
+        'pivotAt',         TO_VARCHAR(PIVOT_AT),
+        'facts',           FACTS,
+        'evidence',        EVIDENCE,
+        'plot',            PLOT,
+        'model',           MODEL,
+        'cortexQueryId',   CORTEX_QUERY_ID,
+        'pipelineVersion', PIPELINE_VERSION,
+        'generatedAt',     TO_VARCHAR(GENERATED_AT)
+    ) AS PAYLOAD
+FROM CARDS;
+
 CREATE OR REPLACE PROCEDURE READ_REPO(P_OWNER STRING, P_REPO STRING)
 RETURNS VARIANT
 LANGUAGE SQL
@@ -102,7 +134,7 @@ BEGIN
             KICKER, HEADLINE_UPRIGHT, HEADLINE_ACCENT, HEADLINE_TRAIL,
             LABEL_FIRST, LABEL_PIVOT, LABEL_LAST,
             ACCENT, ACCENT_REASON,
-            FACTS, EVIDENCE, PLOT, MODEL, GENERATED_AT
+            FACTS, EVIDENCE, PLOT, MODEL, PIPELINE_VERSION, GENERATED_AT
         )
         SELECT
             w.REPO_OWNER, w.REPO_NAME, 'none', 0,
@@ -125,6 +157,7 @@ BEGIN
             OBJECT_CONSTRUCT(),
             p.PLOT,
             'none',
+            (SELECT VERSION FROM PIPELINE_VERSION),
             CURRENT_TIMESTAMP()
         FROM REPO_STORYLINE w
         JOIN CARD_PLOT p USING (REPO_OWNER, REPO_NAME)
@@ -151,6 +184,7 @@ BEGIN
                    'plot',            PLOT,
                    'model',           MODEL,
                    'cortexQueryId',   NULL,
+                   'pipelineVersion', PIPELINE_VERSION,
                    'generatedAt',     TO_VARCHAR(GENERATED_AT)
                )
           INTO :result
@@ -203,7 +237,14 @@ BEGIN
                                e.FACTS:largestGap:from::STRING,
                                e.FACTS:largestGap:to::STRING,
                                TO_JSON(e.EVIDENCE),
-                               TO_JSON(e.COMMITS)
+                               TO_JSON(e.COMMITS),
+                               IFF(
+                                   e.FACTS:windowed::BOOLEAN,
+                                   'a window — the most recent ' || e.FACTS:commitCount::STRING
+                                       || ' commits of a longer history, which was already '
+                                       || 'running before the earliest commit you can see',
+                                   'the whole history — the repo''s first commit through its last'
+                               )
                            )
         )
       INTO :card
@@ -228,27 +269,22 @@ BEGIN
         );
     END IF;
 
-    -- Reject guard: rules that SQL can check for free. Repairs (empty-when) are NOT
-    -- rejects — they get applied in the INSERT. These are the cases where the model
-    -- misbehaved badly enough that the card would misrender or lie: bad hex, over-
-    -- length text that would break the frame, facts leaking into the poetic tails,
-    -- kicker echoing the storyline keyword.
+    -- Reject guard. Repairs (empty-when) are NOT rejects; they apply in the INSERT.
+    --
+    -- Length is deliberately absent. Constrained decoding takes no maxLength, so the caps in
+    -- the prompt are guidance the model is free to miss — and the renderer shrinks to fit
+    -- anyway. Only what no layout can absorb is rejected here: a colour that is not a colour,
+    -- a fact leaking into a poetic tail, a kicker parroting the storyline keyword.
     SELECT ARRAY_COMPACT(ARRAY_CONSTRUCT(
         IFF(NOT REGEXP_LIKE(:card:ai:accent::STRING, '^#[0-9a-fA-F]{6}$'),
             'accent_hex_invalid', NULL),
-        IFF(LENGTH(:card:ai:kicker::STRING)           > 40, 'kicker_too_long',           NULL),
-        IFF(LENGTH(:card:ai:headline_upright::STRING) > 45, 'headline_upright_too_long', NULL),
-        IFF(LENGTH(:card:ai:headline_accent::STRING)  > 55, 'headline_accent_too_long',  NULL),
-        IFF(LENGTH(:card:ai:headline_trail::STRING)   > 5,  'headline_trail_too_long',   NULL),
-        IFF(LENGTH(:card:ai:label_first::STRING)      > 30, 'label_first_too_long',      NULL),
-        IFF(LENGTH(:card:ai:label_pivot::STRING)      > 30, 'label_pivot_too_long',      NULL),
-        IFF(LENGTH(:card:ai:label_last::STRING)       > 30, 'label_last_too_long',       NULL),
-        IFF(LENGTH(:card:ai:accent_reason::STRING)    > 60, 'accent_reason_too_long',    NULL),
         IFF(:card:ai:label_first::STRING RLIKE '.*[0-9].*', 'label_first_has_digits',  NULL),
         IFF(:card:ai:label_pivot::STRING RLIKE '.*[0-9].*', 'label_pivot_has_digits',  NULL),
         IFF(:card:ai:label_last::STRING  RLIKE '.*[0-9].*', 'label_last_has_digits',   NULL),
-        IFF(LOWER(:card:ai:kicker::STRING) IN
-                ('relapse','nocturne','binge','collapse','fight','resurrection'),
+        -- The storyline is an internal label. A kicker that contains it ("the resurrection")
+        -- is the database talking, not a genre a reader would name. Exact-match let it through.
+        IFF(REGEXP_LIKE(LOWER(:card:ai:kicker::STRING),
+                '.*(relapse|nocturne|binge|collapse|fight|resurrection).*'),
             'kicker_echoes_storyline', NULL)
     )) INTO :reasons;
 
@@ -268,7 +304,7 @@ BEGIN
         KICKER, HEADLINE_UPRIGHT, HEADLINE_ACCENT, HEADLINE_TRAIL,
         LABEL_FIRST, LABEL_PIVOT, LABEL_LAST,
         ACCENT, ACCENT_REASON,
-        FACTS, EVIDENCE, PLOT, MODEL, CORTEX_QUERY_ID, GENERATED_AT
+        FACTS, EVIDENCE, PLOT, MODEL, CORTEX_QUERY_ID, PIPELINE_VERSION, GENERATED_AT
     )
     SELECT
         :P_OWNER,
@@ -291,6 +327,7 @@ BEGIN
         :card:plot,
         'claude-sonnet-4-5',
         :cortex_query_id,
+        (SELECT VERSION FROM PIPELINE_VERSION),
         CURRENT_TIMESTAMP();
 
     SELECT OBJECT_CONSTRUCT(
@@ -314,6 +351,7 @@ BEGIN
                'plot',            PLOT,
                'model',           MODEL,
                'cortexQueryId',   CORTEX_QUERY_ID,
+               'pipelineVersion', PIPELINE_VERSION,
                'generatedAt',     TO_VARCHAR(GENERATED_AT)
            )
       INTO :result

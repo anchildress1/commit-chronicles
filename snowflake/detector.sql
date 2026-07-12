@@ -15,7 +15,12 @@ SELECT
      7 AS BINGE_MIN_STREAK_DAYS,
      4 AS FIGHT_MIN_COMMITS,
     22 AS NIGHT_START_HOUR,
-     5 AS NIGHT_END_HOUR;
+     5 AS NIGHT_END_HOUR,
+    -- Cortex sees a share of the history, not a fixed handful. Twenty subject lines out of
+    -- a hundred is not enough material to write from, and it shows in the prose.
+    25 AS EVIDENCE_SHARE_PCT,
+    20 AS EVIDENCE_MIN_LINES,
+   140 AS EVIDENCE_MAX_LINES;
 
 -- DAYS_SINCE_LAST is relative to now, so COLLAPSE is a claim about today.
 -- MODE() breaks ties nondeterministically, so a repo with two equally prolific authors
@@ -50,9 +55,11 @@ SELECT
     DATEDIFF(day, MAX(c.AUTHORED_AT), CURRENT_TIMESTAMP()) AS DAYS_SINCE_LAST,
     SUM(IFF(c.UTC_HOUR >= cfg.NIGHT_START_HOUR
          OR c.UTC_HOUR <  cfg.NIGHT_END_HOUR, 1, 0))       AS NIGHT_COMMITS,
-    SUM(IFF(c.IS_AI_ASSISTED, 1, 0))                AS AI_ASSISTED_COMMITS
+    SUM(IFF(c.IS_AI_ASSISTED, 1, 0))                AS AI_ASSISTED_COMMITS,
+    COALESCE(MAX(i.WINDOWED), FALSE)                AS WINDOWED
 FROM COMMITS_CLEAN c
 JOIN REPO_PRIMARY_AUTHOR a USING (REPO_OWNER, REPO_NAME)
+LEFT JOIN REPO_INGEST i USING (REPO_OWNER, REPO_NAME)
 CROSS JOIN DETECTOR_CONFIG cfg
 GROUP BY c.REPO_OWNER, c.REPO_NAME, a.AUTHOR, a.AUTHOR_LOGIN;
 
@@ -387,6 +394,7 @@ SELECT
         'firstCommitSubject', f.FIRST_COMMIT_SUBJECT,
         'lastCommitAt',       TO_VARCHAR(f.LAST_COMMIT_AT),
         'lastCommitSubject',  f.LAST_COMMIT_SUBJECT,
+        'windowed',           f.WINDOWED,
         'largestGap',         IFF(g.GAP_DAYS IS NULL, NULL, OBJECT_CONSTRUCT(
             'days', g.GAP_DAYS,
             'from', TO_VARCHAR(g.DARK_FROM),
@@ -401,25 +409,103 @@ QUALIFY ROW_NUMBER() OVER (
     ORDER BY s.SCORE DESC NULLS LAST, s.DRAMA_RANK
 ) = 1;
 
+-- A squash merge is several changes wearing one commit message. The subject says
+-- "feat: the thing (#42)" and the body carries the actual work as a bullet list, so a
+-- history full of squashes reads as a dozen faceless merges unless the body is opened up.
+-- Each bullet becomes its own line item, timed with its parent.
+CREATE OR REPLACE VIEW COMMIT_LINES AS
+WITH body_lines AS (
+    SELECT
+        c.REPO_OWNER, c.REPO_NAME, c.SHA, c.AUTHORED_AT, c.UTC_HOUR, c.IS_AI_ASSISTED,
+        b.index                AS LINE_NO,
+        RTRIM(b.value::STRING) AS RAW_LINE,
+        -- Snowflake regex anchors at both ends, so this matches a whole bullet line.
+        REGEXP_LIKE(b.value::STRING, '[[:space:]]*[*+-][[:space:]]+[^[:space:]].*') AS IS_BULLET
+    FROM COMMITS_CLEAN c,
+         LATERAL FLATTEN(input => SPLIT(c.BODY, '\n')) b
+    -- Trailers are not work. They are the paperwork attached to it.
+    WHERE NOT REGEXP_LIKE(b.value::STRING,
+              '.*(Co-authored-by|Signed-off-by|Generated-by|Reviewed-by) *:.*', 'i')
+),
+-- A bullet that wraps runs on across the next lines, and those lines carry no marker. Number
+-- each bullet and let its continuations inherit the number, or Cortex reads half a sentence.
+grouped AS (
+    SELECT
+        REPO_OWNER, REPO_NAME, SHA, AUTHORED_AT, UTC_HOUR, IS_AI_ASSISTED, LINE_NO, RAW_LINE,
+        SUM(IFF(IS_BULLET, 1, 0)) OVER (
+            PARTITION BY REPO_OWNER, REPO_NAME, SHA ORDER BY LINE_NO
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS BULLET_NO
+    FROM body_lines
+    WHERE LENGTH(TRIM(RAW_LINE)) > 0
+),
+squashed AS (
+    SELECT
+        REPO_OWNER, REPO_NAME, SHA, AUTHORED_AT, UTC_HOUR, IS_AI_ASSISTED,
+        BULLET_NO AS PART,
+        TRIM(LISTAGG(
+            TRIM(REGEXP_REPLACE(RAW_LINE, '^[[:space:]]*[*+-][[:space:]]+', '')),
+            ' '
+        ) WITHIN GROUP (ORDER BY LINE_NO)) AS LINE
+    FROM grouped
+    WHERE BULLET_NO >= 1
+    GROUP BY REPO_OWNER, REPO_NAME, SHA, AUTHORED_AT, UTC_HOUR, IS_AI_ASSISTED, BULLET_NO
+),
+exploded AS (
+    SELECT
+        REPO_OWNER, REPO_NAME, SHA, AUTHORED_AT, UTC_HOUR, IS_AI_ASSISTED,
+        SUBJECT AS LINE, 0 AS PART, FALSE AS FROM_SQUASH
+    FROM COMMITS_CLEAN
+
+    UNION ALL
+
+    SELECT
+        REPO_OWNER, REPO_NAME, SHA, AUTHORED_AT, UTC_HOUR, IS_AI_ASSISTED,
+        LINE, PART, TRUE AS FROM_SQUASH
+    FROM squashed
+)
+SELECT * FROM exploded WHERE LENGTH(LINE) >= 8;
+
 -- The only rows Cortex ever sees. A 'none' storyline has a NULL PIVOT_AT, which would
 -- make the pivot window tie across the whole partition and pick rows nondeterministically.
 CREATE OR REPLACE VIEW CARD_EVIDENCE AS
-WITH picked AS (
+WITH budget AS (
     SELECT
-        c.REPO_OWNER, c.REPO_NAME, c.SUBJECT, c.AUTHORED_AT, c.UTC_HOUR, c.IS_AI_ASSISTED
-    FROM COMMITS_CLEAN c
+        f.REPO_OWNER,
+        f.REPO_NAME,
+        LEAST(
+            GREATEST(
+                CEIL(l.LINE_COUNT * cfg.EVIDENCE_SHARE_PCT / 100),
+                cfg.EVIDENCE_MIN_LINES
+            ),
+            cfg.EVIDENCE_MAX_LINES
+        ) AS TARGET_LINES
+    FROM REPO_FACTS f
+    JOIN (
+        SELECT REPO_OWNER, REPO_NAME, COUNT(*) AS LINE_COUNT
+        FROM COMMIT_LINES GROUP BY REPO_OWNER, REPO_NAME
+    ) l USING (REPO_OWNER, REPO_NAME)
+    CROSS JOIN DETECTOR_CONFIG cfg
+),
+picked AS (
+    SELECT
+        l.REPO_OWNER, l.REPO_NAME, l.LINE, l.AUTHORED_AT, l.UTC_HOUR,
+        l.IS_AI_ASSISTED, l.FROM_SQUASH
+    FROM COMMIT_LINES l
     JOIN REPO_STORYLINE w USING (REPO_OWNER, REPO_NAME)
+    JOIN budget       t USING (REPO_OWNER, REPO_NAME)
     QUALIFY
-        -- SHA breaks the last tie: rebases and batch pushes share an AUTHORED_AT, and
-        -- without it the twelve commits Cortex sees could differ between reads.
+        -- SHA and PART break the last tie: rebases and batch pushes share an AUTHORED_AT,
+        -- and without them the lines Cortex sees could differ between reads.
         (w.PIVOT_AT IS NOT NULL
-         AND ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
-                                ORDER BY ABS(DATEDIFF(hour, w.PIVOT_AT, c.AUTHORED_AT)),
-                                         c.AUTHORED_AT, c.SHA) <= 12)
-     OR ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
-                           ORDER BY c.AUTHORED_AT, c.SHA) <= 3
-     OR ROW_NUMBER() OVER (PARTITION BY c.REPO_OWNER, c.REPO_NAME
-                           ORDER BY c.AUTHORED_AT DESC, c.SHA) <= 5
+         AND ROW_NUMBER() OVER (PARTITION BY l.REPO_OWNER, l.REPO_NAME
+                                ORDER BY ABS(DATEDIFF(hour, w.PIVOT_AT, l.AUTHORED_AT)),
+                                         l.AUTHORED_AT, l.SHA, l.PART) <= t.TARGET_LINES)
+        -- The opening and the ending are the shape of the story whatever the pivot is.
+     OR ROW_NUMBER() OVER (PARTITION BY l.REPO_OWNER, l.REPO_NAME
+                           ORDER BY l.AUTHORED_AT, l.SHA, l.PART) <= 5
+     OR ROW_NUMBER() OVER (PARTITION BY l.REPO_OWNER, l.REPO_NAME
+                           ORDER BY l.AUTHORED_AT DESC, l.SHA, l.PART) <= 8
 )
 SELECT
     w.REPO_OWNER,
@@ -430,10 +516,11 @@ SELECT
     w.FACTS,
     w.EVIDENCE,
     ARRAY_AGG(OBJECT_CONSTRUCT(
-        'subject',    p.SUBJECT,
+        'subject',    p.LINE,
         'authoredAt', TO_VARCHAR(p.AUTHORED_AT),
         'utcHour',    p.UTC_HOUR,
-        'aiAssisted', p.IS_AI_ASSISTED
+        'aiAssisted', p.IS_AI_ASSISTED,
+        'fromSquash', p.FROM_SQUASH
     )) WITHIN GROUP (ORDER BY p.AUTHORED_AT) AS COMMITS
 FROM REPO_STORYLINE w
 JOIN picked p USING (REPO_OWNER, REPO_NAME)

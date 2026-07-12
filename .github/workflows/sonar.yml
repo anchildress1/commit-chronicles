@@ -24,6 +24,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Sonar reads coverage from a report; it does not run the tests itself. Without
+      # this step the scan lands with 0% coverage and the gate fails on a number no
+      # change in this repo could move.
+      - name: Unit tests with coverage
+        run: npm test
+
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:

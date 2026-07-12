@@ -1,11 +1,14 @@
 import { Storage } from '@google-cloud/storage';
+import { safeAccent } from './card/format.js';
 import type { CardPayload } from './card/types.js';
 
 // The cache of record. The card's existence *is* the ready state — no second source of
 // truth to drift. Cloud Run is the only writer.
 
 export type JobState =
-  | { status: 'ready'; repo: string }
+  /** The accent rides in the object's metadata, so the page can wear the card's colour
+   *  without downloading the payload on every poll. */
+  | { status: 'ready'; repo: string; accent: string }
   | { status: 'generating'; repo: string; startedAt: string }
   | { status: 'failed'; repo: string; errorCode: string; failedAt: string; reasons?: string[] }
   | { status: 'unknown'; repo: string };
@@ -69,10 +72,17 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
     async readState(owner, repo) {
       const base = prefix(owner, repo);
 
-      // Checked by existence, and checked first: a card outranks any stale marker beside it.
-      const [ready] = await bucket.file(`${base}/card.json`).exists();
-      if (ready) {
-        return { status: 'ready', repo: `${owner}/${repo}` };
+      // Checked first, and checked by metadata: a card outranks any stale marker beside it,
+      // and the accent it was drawn in comes back on the same call that proves it exists.
+      try {
+        const [metadata] = await bucket.file(`${base}/card.json`).getMetadata();
+        return {
+          status: 'ready',
+          repo: `${owner}/${repo}`,
+          accent: safeAccent(String(metadata.metadata?.['accent'] ?? '')),
+        };
+      } catch (error) {
+        if (!isNotFound(error)) throw error;
       }
 
       const state = await readJson(`${base}/state.json`);
@@ -148,7 +158,12 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
 
       await bucket.file(`${base}/card.json`).save(JSON.stringify(payload), {
         contentType: 'application/json',
-        metadata: { cacheControl: 'public, max-age=300' },
+        metadata: {
+          cacheControl: 'public, max-age=300',
+          // Read back by readState. The page wears the colour Cortex chose for this repo,
+          // and a poll should not pay for the whole payload to learn one hex.
+          metadata: { accent: safeAccent(payload.accent) },
+        },
       });
 
       await bucket

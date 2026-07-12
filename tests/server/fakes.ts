@@ -25,8 +25,13 @@ export function fakeStore(): FakeStore {
     writes,
 
     readState: (owner, repo) => {
-      if (cards.has(key(owner, repo))) {
-        return Promise.resolve({ status: 'ready', repo: key(owner, repo) });
+      const card = cards.get(key(owner, repo));
+      if (card) {
+        return Promise.resolve({
+          status: 'ready',
+          repo: key(owner, repo),
+          accent: card.payload.accent,
+        });
       }
       return Promise.resolve(
         states.get(key(owner, repo)) ?? { status: 'unknown', repo: key(owner, repo) },

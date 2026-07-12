@@ -12,6 +12,7 @@ class GcsError extends Error {
 interface FakeObject {
   data: string;
   generation: number;
+  custom: Record<string, string>;
 }
 
 /**
@@ -35,7 +36,7 @@ function fakeStorage(objects = new Map<string, FakeObject>()) {
         getMetadata: () => {
           const object = objects.get(path);
           if (!object) return Promise.reject(new GcsError(404));
-          return Promise.resolve([{ generation: object.generation }]);
+          return Promise.resolve([{ generation: object.generation, metadata: object.custom }]);
         },
         save: (data: string, options?: Record<string, unknown>) => {
           const expected = (options?.['preconditionOpts'] as { ifGenerationMatch?: number })
@@ -44,12 +45,17 @@ function fakeStorage(objects = new Map<string, FakeObject>()) {
           if (expected !== undefined && expected !== current) {
             return Promise.reject(new GcsError(412));
           }
-          objects.set(path, { data, generation: current + 1 });
+          const metadata = options?.['metadata'] as
+            { cacheControl?: unknown; metadata?: Record<string, string> } | undefined;
+          objects.set(path, {
+            data,
+            generation: current + 1,
+            custom: metadata?.metadata ?? {},
+          });
           saved.push({
             path,
             contentType: options?.['contentType'] as string | undefined,
-            cacheControl: (options?.['metadata'] as { cacheControl?: unknown } | undefined)
-              ?.cacheControl,
+            cacheControl: metadata?.cacheControl,
           });
           return Promise.resolve();
         },
@@ -83,7 +89,27 @@ describe('readState', () => {
     await expect(store(fake).readState('atlas', 'pipeline')).resolves.toEqual({
       status: 'ready',
       repo: 'atlas/pipeline',
+      accent: CARD.accent,
     });
+  });
+
+  it('hands back the accent so the page can dress itself in the card’s colour', async () => {
+    const fake = fakeStorage();
+    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', { ...CARD, accent: '#7fe4c5' });
+
+    const state = await store(fake).readState('atlas', 'pipeline');
+    expect(state).toMatchObject({ status: 'ready', accent: '#7fe4c5' });
+  });
+
+  it('falls back to grey rather than letting a junk accent reach the page', async () => {
+    const fake = fakeStorage();
+    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', {
+      ...CARD,
+      accent: 'javascript:alert(1)',
+    });
+
+    const state = await store(fake).readState('atlas', 'pipeline');
+    expect(state).toMatchObject({ status: 'ready', accent: '#6b7280' });
   });
 
   it('does not download the card just to learn that it exists', async () => {
@@ -102,6 +128,7 @@ describe('readState', () => {
     fake.objects.set('cards/atlas/pipeline/card.json', {
       data: JSON.stringify(CARD),
       generation: 1,
+      custom: {},
     });
 
     await expect(store(fake).readState('atlas', 'pipeline')).resolves.toMatchObject({

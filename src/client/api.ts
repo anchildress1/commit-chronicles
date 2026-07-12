@@ -5,6 +5,8 @@ export type JobStatus = 'unknown' | 'generating' | 'ready' | 'failed';
 export interface JobState {
   status: JobStatus;
   repo: string;
+  /** The colour Cortex chose for this repo's card. Present once the card exists. */
+  accent?: string;
   startedAt?: string;
   errorCode?: string;
   reasons?: string[];

@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type { CSSProperties, JSX } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { InvalidSlugError, parseSlug, type RepoSlug } from '../shared/slug.js';
 import { useJob } from './useJob.js';
@@ -55,9 +55,13 @@ export function App(): JSX.Element {
     return <Loading slug={slug} />;
   }, [slug, state, error, navigate, retry]);
 
-  // Cortex's accent belongs on the repo's card, which carries it. The shell stays brand.
+  // Before there is a story there is no colour to read it in, so the shell wears the brand.
+  // Once the card exists the page takes its accent — a mint card beside a cyan button is two
+  // products arguing, and the card is the one that has to win.
+  const accent = state?.status === 'ready' ? (state.accent ?? null) : null;
+
   return (
-    <div>
+    <div style={accent ? ({ '--accent': accent } as CSSProperties) : undefined}>
       <Nav
         onHome={() => {
           navigate(null);

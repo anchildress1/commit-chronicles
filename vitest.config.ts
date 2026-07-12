@@ -16,12 +16,13 @@ export default defineConfig({
       // worth asserting. Coverage is a floor on logic, not a participation trophy.
       include: ['src/**/*.{ts,tsx}'],
       exclude: [
+        // Boot wiring: no branches of ours to assert.
         'src/server/index.ts',
-        'src/server/config.ts',
+        'src/server/rerender.ts',
+        'src/client/main.tsx',
+        // SDK adapters: the logic under test would be the vendor's.
         'src/server/snowflake.ts',
         'src/server/queue.ts',
-        'src/client/main.tsx',
-        'src/client/screens/**',
         'src/**/*.d.ts',
       ],
       thresholds: {

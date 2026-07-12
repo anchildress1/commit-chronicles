@@ -67,9 +67,7 @@ test('submitting a repo routes to it and shows the reading state', async ({ page
   await page.getByRole('button', { name: 'Read →' }).click();
 
   await expect(page).toHaveURL('/atlas/pipeline');
-  await expect(page.getByRole('heading', { level: 2 })).toContainText(
-    'Snowflake Cortex is reading',
-  );
+  await expect(page.getByRole('heading', { level: 2 })).toContainText('Cortex is reading');
 });
 
 test('a ready repo shows the card and the README embed', async ({ page }) => {

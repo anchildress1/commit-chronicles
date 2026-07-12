@@ -91,7 +91,7 @@ export function loadConfig(): Config {
   return {
     port: int('PORT', 8080),
     bucket: required('CARD_BUCKET'),
-    publicOrigin: origin('PUBLIC_ORIGIN', 'https://commitchronicles.dev'),
+    publicOrigin: origin('PUBLIC_ORIGIN', 'https://commitchronicles.anchildress1.dev'),
     dailyGenerationCap: int('DAILY_GENERATION_CAP', 100),
     generatingTtlMs: int('GENERATING_TTL_SECONDS', 600) * 1000,
     tasks: loadTasks(),

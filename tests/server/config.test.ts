@@ -102,7 +102,7 @@ describe('loadConfig', () => {
 
   it('defaults the public origin to the site', () => {
     delete process.env['PUBLIC_ORIGIN'];
-    expect(loadConfig().publicOrigin).toBe('https://commitchronicles.dev');
+    expect(loadConfig().publicOrigin).toBe('https://commitchronicles.anchildress1.dev');
   });
 
   it('gives a bare host the scheme it needs to be a link', () => {

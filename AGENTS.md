@@ -69,7 +69,7 @@ for the full product spec and `docs/build-plan.md` for the delivery order.
   repo. It emits an ordinary UDF around `AI_COMPLETE` anyway, so we write that ourselves.
 
 - **Backend**: Cloud Run — `/api/generate`, plus serving `/{owner}/{repo}` and
-  `/{owner}/{repo}/card.svg`. It renders the SVG from Snowflake's card payload and
+  `/{owner}/{repo}/card.png`. It renders the SVG from Snowflake's card payload and
   writes it to the bucket. It computes no analysis of its own.
 - **Cache of record**: a public GCS bucket. The card's existence in the bucket _is_
   the ready state.
@@ -105,8 +105,9 @@ rescaffold; if you find a reference to either, it is stale — fix it.
 - A repo with no real story says so. Sparse histories get an honest template card, not
   manufactured drama.
 - Cost guards are mandatory: cap commits per repo, cap daily live generations, cache
-  failed states, reject private/missing/oversized repos, and keep gallery cards
-  pre-generated.
+  failed states, reject private/missing repos, and keep the landing-page example cards
+  pre-generated. An oversized history is windowed to its newest slice, not rejected —
+  and the card says so rather than passing a slice off as the whole life.
 
 ## Documentation
 

@@ -317,7 +317,9 @@ describe('rerender', () => {
 
     await expect(generator.rerender(SLUG)).resolves.toBe(true);
 
-    expect(store.cards.get('atlas/pipeline')?.svg).toContain('<svg');
+    expect(store.cards.get('atlas/pipeline')?.png?.subarray(0, 4)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    );
     expect(store.cards.get('atlas/pipeline')?.payload.accent).toBe('#e8a04a');
   });
 
@@ -349,9 +351,11 @@ describe('run', () => {
 
     expect(snowflake.calls).toEqual(['atlas/pipeline']);
     const written = store.cards.get('atlas/pipeline');
-    expect(written?.svg).toContain('<svg');
+    // \x89PNG: the card is a real raster, not markup, because dev.to will not serve an SVG.
+    expect(written?.png?.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    // A card that rasterized to nothing still has a valid PNG header, so check it drew.
+    expect(written?.png.byteLength).toBeGreaterThan(10_000);
     // The colour on the card is the colour Cortex chose, carried through untouched.
-    expect(written?.svg).toContain('#e8a04a');
     expect(written?.payload.accent).toBe('#e8a04a');
   });
 

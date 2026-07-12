@@ -395,11 +395,20 @@ SELECT
         'lastCommitAt',       TO_VARCHAR(f.LAST_COMMIT_AT),
         'lastCommitSubject',  f.LAST_COMMIT_SUBJECT,
         'windowed',           f.WINDOWED,
-        'largestGap',         IFF(g.GAP_DAYS IS NULL, NULL, OBJECT_CONSTRUCT(
-            'days', g.GAP_DAYS,
-            'from', TO_VARCHAR(g.DARK_FROM),
-            'to',   TO_VARCHAR(g.DARK_TO)
-        ))
+        -- The gap only reaches the card when the gap IS the story. Every repo has a longest
+        -- silence, and handing it over unconditionally put a second, unrelated storyline on
+        -- a nocturne card: Cortex is passed GAP_DAYS and writes about the dark stretch, and
+        -- the renderer draws a void panel for it. One card, one story — so a storyline whose
+        -- drama is not the silence does not get told about it.
+        'largestGap',         IFF(
+            g.GAP_DAYS IS NULL
+            OR COALESCE(s.STORYLINE, 'none') NOT IN ('relapse', 'resurrection', 'collapse'),
+            NULL,
+            OBJECT_CONSTRUCT(
+                'days', g.GAP_DAYS,
+                'from', TO_VARCHAR(g.DARK_FROM),
+                'to',   TO_VARCHAR(g.DARK_TO)
+            ))
     )                                        AS FACTS
 FROM REPO_FACTS f
 LEFT JOIN REPO_LARGEST_GAP g USING (REPO_OWNER, REPO_NAME)
@@ -490,10 +499,35 @@ WITH budget AS (
 picked AS (
     SELECT
         l.REPO_OWNER, l.REPO_NAME, l.LINE, l.AUTHORED_AT, l.UTC_HOUR,
-        l.IS_AI_ASSISTED, l.FROM_SQUASH
+        l.IS_AI_ASSISTED, l.FROM_SQUASH, l.SHA, l.PART
     FROM COMMIT_LINES l
     JOIN REPO_STORYLINE w USING (REPO_OWNER, REPO_NAME)
     JOIN budget       t USING (REPO_OWNER, REPO_NAME)
+    CROSS JOIN DETECTOR_CONFIG cfg
+    -- Cortex sees only the window the storyline was actually found in. A nocturne is a claim
+    -- about the night, so showing it the daylight commits invites a card about something
+    -- else. The storylines whose drama IS the whole arc — a silence, a collapse, a return —
+    -- keep the full history, because for them the arc is the evidence.
+    -- COALESCE to TRUE, not FALSE: an unparseable bound would otherwise filter every line
+    -- away and hand Cortex an empty card. Falling back to the whole history is a worse story;
+    -- falling back to no story at all is a broken one.
+    WHERE CASE COALESCE(w.STORYLINE, 'none')
+              WHEN 'nocturne' THEN
+                  l.UTC_HOUR >= cfg.NIGHT_START_HOUR OR l.UTC_HOUR < cfg.NIGHT_END_HOUR
+              WHEN 'binge' THEN
+                  COALESCE(
+                      DATE(l.AUTHORED_AT)
+                          BETWEEN TRY_TO_DATE(w.EVIDENCE:streakStart::STRING)
+                              AND TRY_TO_DATE(w.EVIDENCE:streakEnd::STRING),
+                      TRUE)
+              WHEN 'fight' THEN
+                  COALESCE(
+                      l.AUTHORED_AT
+                          BETWEEN TRY_TO_TIMESTAMP_TZ(w.EVIDENCE:windowStart::STRING)
+                              AND TRY_TO_TIMESTAMP_TZ(w.EVIDENCE:windowEnd::STRING),
+                      TRUE)
+              ELSE TRUE
+          END
     QUALIFY
         -- SHA and PART break the last tie: rebases and batch pushes share an AUTHORED_AT,
         -- and without them the lines Cortex sees could differ between reads.
@@ -515,13 +549,17 @@ SELECT
     w.PIVOT_AT,
     w.FACTS,
     w.EVIDENCE,
+    -- Same tiebreak as `picked`, and for the same reason: every line exploded out of one
+    -- squash body carries that merge's AUTHORED_AT, so PART 0..n are tied by construction.
+    -- Ordering on the timestamp alone lets the array — and therefore the prompt, and
+    -- therefore the card — come back different between two reads of the same repo.
     ARRAY_AGG(OBJECT_CONSTRUCT(
         'subject',    p.LINE,
         'authoredAt', TO_VARCHAR(p.AUTHORED_AT),
         'utcHour',    p.UTC_HOUR,
         'aiAssisted', p.IS_AI_ASSISTED,
         'fromSquash', p.FROM_SQUASH
-    )) WITHIN GROUP (ORDER BY p.AUTHORED_AT) AS COMMITS
+    )) WITHIN GROUP (ORDER BY p.AUTHORED_AT, p.SHA, p.PART) AS COMMITS
 FROM REPO_STORYLINE w
 JOIN picked p USING (REPO_OWNER, REPO_NAME)
 GROUP BY w.REPO_OWNER, w.REPO_NAME, w.STORYLINE, w.SCORE, w.PIVOT_AT, w.FACTS, w.EVIDENCE;

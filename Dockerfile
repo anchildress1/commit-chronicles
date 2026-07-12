@@ -23,6 +23,9 @@ ENV NODE_ENV=production
 COPY --from=deps  /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+# The image ships no fonts, and the card names its families by hand. Without these the PNG
+# rasterizes with the type missing — and the type is the card.
+COPY assets ./assets
 
 USER node
 EXPOSE 8080

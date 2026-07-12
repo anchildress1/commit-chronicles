@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCardStore } from '../../src/server/bucket.js';
 import { CARD } from '../fixtures/card.js';
 
+// dev.to proxies remote images and will not serve an SVG, so the card is a PNG.
+const PNG = Buffer.from('png');
+
 /** A GCS error carries an HTTP status on `code`; the store branches on 404 and 412. */
 class GcsError extends Error {
   constructor(readonly code: number) {
@@ -41,7 +44,7 @@ function fakeStorage(objects = new Map<string, FakeObject>()) {
           if (!object) return Promise.reject(new GcsError(404));
           return Promise.resolve([{ generation: object.generation, metadata: object.custom }]);
         },
-        save: (data: string, options?: Record<string, unknown>) => {
+        save: (data: string | Buffer, options?: Record<string, unknown>) => {
           const expected = (
             options?.['preconditionOpts'] as { ifGenerationMatch?: number | string }
           )?.ifGenerationMatch;
@@ -52,7 +55,7 @@ function fakeStorage(objects = new Map<string, FakeObject>()) {
           const metadata = options?.['metadata'] as
             { cacheControl?: unknown; metadata?: Record<string, string> } | undefined;
           objects.set(path, {
-            data,
+            data: typeof data === 'string' ? data : data.toString('utf8'),
             generation: String(BigInt(current) + 1n),
             custom: metadata?.metadata ?? {},
           });
@@ -88,19 +91,19 @@ describe('readState', () => {
 
   it('is ready when the card exists — existence is the whole signal', async () => {
     const fake = fakeStorage();
-    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+    await store(fake).writeCard('atlas', 'pipeline', PNG, CARD);
 
     await expect(store(fake).readState('atlas', 'pipeline')).resolves.toEqual({
       status: 'ready',
       repo: 'atlas/pipeline',
       accent: CARD.accent,
-      cardUrl: 'https://storage.googleapis.com/test-bucket/cards/atlas/pipeline/card.svg',
+      cardUrl: 'https://storage.googleapis.com/test-bucket/cards/atlas/pipeline/card.png',
     });
   });
 
   it('hands back the accent so the page can dress itself in the card’s colour', async () => {
     const fake = fakeStorage();
-    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', { ...CARD, accent: '#7fe4c5' });
+    await store(fake).writeCard('atlas', 'pipeline', PNG, { ...CARD, accent: '#7fe4c5' });
 
     const state = await store(fake).readState('atlas', 'pipeline');
     expect(state).toMatchObject({ status: 'ready', accent: '#7fe4c5' });
@@ -108,7 +111,7 @@ describe('readState', () => {
 
   it('falls back to grey rather than letting a junk accent reach the page', async () => {
     const fake = fakeStorage();
-    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', {
+    await store(fake).writeCard('atlas', 'pipeline', PNG, {
       ...CARD,
       accent: 'javascript:alert(1)',
     });
@@ -119,7 +122,7 @@ describe('readState', () => {
 
   it('does not download the card just to learn that it exists', async () => {
     const fake = fakeStorage();
-    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+    await store(fake).writeCard('atlas', 'pipeline', PNG, CARD);
     fake.downloads.length = 0;
 
     await store(fake).readState('atlas', 'pipeline');
@@ -168,22 +171,22 @@ describe('readState', () => {
 });
 
 describe('writeCard', () => {
-  it('writes the SVG before the payload, so a crash leaves the repo retryable', async () => {
+  it('writes the image before the payload, so a crash leaves the repo retryable', async () => {
     const fake = fakeStorage();
-    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+    await store(fake).writeCard('atlas', 'pipeline', PNG, CARD);
 
     expect(fake.saved.map((entry) => entry.path)).toEqual([
-      'cards/atlas/pipeline/card.svg',
+      'cards/atlas/pipeline/card.png',
       'cards/atlas/pipeline/card.json',
     ]);
   });
 
-  it('serves the SVG with a cache header camo will honour', async () => {
+  it('serves the PNG with a cache header camo will honour', async () => {
     const fake = fakeStorage();
-    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+    await store(fake).writeCard('atlas', 'pipeline', PNG, CARD);
 
     expect(fake.saved[0]).toMatchObject({
-      contentType: 'image/svg+xml',
+      contentType: 'image/png',
       cacheControl: 'public, max-age=3600',
     });
   });
@@ -191,29 +194,27 @@ describe('writeCard', () => {
   it('clears the generating marker once the card lands', async () => {
     const fake = fakeStorage();
     await store(fake).claimGenerating('atlas', 'pipeline');
-    await store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD);
+    await store(fake).writeCard('atlas', 'pipeline', PNG, CARD);
 
     expect(fake.objects.has('cards/atlas/pipeline/state.json')).toBe(false);
   });
 
   it('does not fail when there was no marker to clear', async () => {
     const fake = fakeStorage();
-    await expect(
-      store(fake).writeCard('atlas', 'pipeline', '<svg/>', CARD),
-    ).resolves.toBeUndefined();
+    await expect(store(fake).writeCard('atlas', 'pipeline', PNG, CARD)).resolves.toBeUndefined();
   });
 });
 
 describe('the card URL', () => {
   it('points readers at the public bucket, never at the service', async () => {
     const fake = fakeStorage();
-    await store(fake).writeCard('atlas', 'pipeline', '<svg>card</svg>', CARD);
+    await store(fake).writeCard('atlas', 'pipeline', PNG, CARD);
 
     const state = await store(fake).readState('atlas', 'pipeline');
 
     expect(state).toMatchObject({
       status: 'ready',
-      cardUrl: 'https://storage.googleapis.com/test-bucket/cards/atlas/pipeline/card.svg',
+      cardUrl: 'https://storage.googleapis.com/test-bucket/cards/atlas/pipeline/card.png',
     });
   });
 });
@@ -402,7 +403,7 @@ describe('claimDailyQuota', () => {
         const file = bucket.file(path, options);
         return {
           ...file,
-          save: (data: string, saveOptions?: Record<string, unknown>) => {
+          save: (data: string | Buffer, saveOptions?: Record<string, unknown>) => {
             if (!blocked && path.includes('/quota/')) {
               blocked = true;
               return Promise.reject(new GcsError(412));

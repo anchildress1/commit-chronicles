@@ -6,6 +6,7 @@ import { TaskNotCreatedError } from './queue.js';
 import type { RepoSlug } from '../shared/slug.js';
 import { isRetryable } from '../shared/errors.js';
 import { renderCard } from './card/svg.js';
+import { renderPng } from './card/png.js';
 import { isCardPayload } from './card/types.js';
 
 export type StartOutcome =
@@ -71,7 +72,7 @@ export async function runGeneration(
       return;
     }
 
-    await store.writeCard(owner, repo, renderCard(result), result);
+    await store.writeCard(owner, repo, renderPng(renderCard(result)), result);
     log('generation ready', {
       repo: slug.slug,
       storyline: result.storyline,
@@ -197,7 +198,7 @@ export function createGenerator(deps: GeneratorDeps): Generator {
       const card = await deps.snowflake.fetchCard(slug.owner, slug.repo);
       if (!card) return false;
 
-      await store.writeCard(slug.owner, slug.repo, renderCard(card), card);
+      await store.writeCard(slug.owner, slug.repo, renderPng(renderCard(card)), card);
       log('card redrawn', { repo: slug.slug, pipelineVersion: card.pipelineVersion });
       return true;
     },

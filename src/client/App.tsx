@@ -7,6 +7,7 @@ import { Loading } from './screens/Loading.js';
 import { Result } from './screens/Result.js';
 import { Failed } from './screens/Failed.js';
 import { Nav } from './screens/Nav.js';
+import { Footer } from './screens/Footer.js';
 
 function slugFromPath(pathname: string): RepoSlug | null {
   try {
@@ -63,13 +64,14 @@ export function App(): JSX.Element {
   const accent = state?.status === 'ready' ? (state.accent ?? null) : null;
 
   return (
-    <div style={accent ? ({ '--accent': accent } as CSSProperties) : undefined}>
+    <div className="shell" style={accent ? ({ '--accent': accent } as CSSProperties) : undefined}>
       <Nav
         onHome={() => {
           navigate(null);
         }}
       />
       {screen}
+      <Footer />
     </div>
   );
 }

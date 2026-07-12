@@ -65,7 +65,7 @@ gcp-bootstrap: ## Create the GCP resources deploy.sh expects (idempotent, one-of
 	./scripts/gcp-bootstrap.sh
 
 deploy: ## Build the image and deploy to Cloud Run
-	set -a; [ -f .env ] && . ./.env; set +a; ./deploy.sh
+	./deploy.sh
 
 clean: ## Remove build output
 	rm -rf dist coverage playwright-report test-results .vite

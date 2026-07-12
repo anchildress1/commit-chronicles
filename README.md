@@ -12,27 +12,16 @@ Paste a public GitHub repo. **Snowflake fetches its own commit history, finds th
 
 ![Commit Chronicles](https://repository-images.githubusercontent.com/1296802597/3d5d4e9b-0ea6-4ff1-b0a9-80e1947d7be3)
 
-**Live:** [commitchronicles.anchildress1.dev](https://commitchronicles.anchildress1.dev) · **Prize target:** Best Use of Snowflake
+**Live:** [commitchronicles.anchildress1.dev](https://commitchronicles.anchildress1.dev) · **Write-up:** [Your obsession leaves a trail. Mine gives it a plot.](https://dev.to/anchildress1/commit-chronicles-your-obsession-leaves-a-trail-mine-gives-it-a-plot-h8j) · **Prize target:** Best Use of Snowflake
 
 > **Judging scope: `v1.0.0` is the challenge submission.** It was cut for the DEV Weekend Challenge deadline and is the only thing that should be judged. The repo was created on 10 Jul 2026 and everything in the entry was built inside the challenge window — the badges above are the receipt. Any commit or release after `v1.0.0` is post-deadline work and is not part of the entry.
-
-Two real repos, two storylines the detector found unaided — a **binge** and a **nocturne**. Every dot, timestamp, and quoted commit is real:
-
-[![save-the-sun](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/save-the-sun/card.png)](https://commitchronicles.anchildress1.dev/anchildress1/save-the-sun)
-
-[![carbon-trace](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/carbon-trace/card.png)](https://commitchronicles.anchildress1.dev/anchildress1/carbon-trace)
-
-And a third, which is the one that proves the other two. `forem/forem` has 463 commits and **no story** — a team repo with continuous CI has no personal arc to find. It says so, in grey, and Cortex is never called:
-
-[![forem/forem](https://storage.googleapis.com/commit-chronicles-cards/cards/forem/forem/card.png)](https://commitchronicles.anchildress1.dev/forem/forem)
-
-A product that cannot return nothing will invent something. This one returns nothing.
 
 ---
 
 ## Table of Contents
 
 - [About](#about)
+- [Examples](#examples)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
@@ -60,6 +49,22 @@ Two rules hold the product together:
 
 - **Cortex interprets the shape. It never invents the facts.** Every timestamp, count, gap, and quoted message on the card is real and derived from ingested commits. Reading the arc is the product; asserting the author's motivation is not.
 - **A repo with no real story says so.** Sparse histories get an honest grey template card, not manufactured drama.
+
+---
+
+## Examples
+
+Two real repos, two storylines the detector found unaided — a **binge** and a **nocturne**. Every dot, timestamp, and quoted commit is real:
+
+[![save-the-sun](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/save-the-sun/card.png)](https://commitchronicles.anchildress1.dev/anchildress1/save-the-sun)
+
+[![carbon-trace](https://storage.googleapis.com/commit-chronicles-cards/cards/anchildress1/carbon-trace/card.png)](https://commitchronicles.anchildress1.dev/anchildress1/carbon-trace)
+
+And a third, which is the one that proves the other two. `forem/forem` has 463 commits and **no story** — a team repo with continuous CI has no personal arc to find. It says so, in grey, and Cortex is never called:
+
+[![forem/forem](https://storage.googleapis.com/commit-chronicles-cards/cards/forem/forem/card.png)](https://commitchronicles.anchildress1.dev/forem/forem)
+
+A product that cannot return nothing will invent something. This one returns nothing.
 
 ---
 

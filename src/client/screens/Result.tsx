@@ -23,6 +23,13 @@ function useCopy(): [boolean, (value: string) => void] {
   return [copied, copy];
 }
 
+/**
+ * The card is the product, so it gets the page.
+ *
+ * Everything else here is chrome: the address, a line of fine print, and the two buttons
+ * that get the card out of this page and into a README. None of it competes for width —
+ * the story has to be readable at a glance, not squinted at next to a column of controls.
+ */
 export function Result({ slug, onHome }: ResultProps): JSX.Element {
   const origin = window.location.origin;
   const [imageCopied, copyImage] = useCopy();
@@ -38,24 +45,16 @@ export function Result({ slug, onHome }: ResultProps): JSX.Element {
         <span>{slug.slug}</span>
       </p>
 
-      <div className="result__head">
-        <p className="eyebrow" style={{ marginBottom: 0 }}>
-          Your card is ready
-        </p>
-        <h2 className="display display--sub">github.com/{slug.slug}, as a story.</h2>
+      <div className="card-frame">
+        {/* The preview is the card the bucket serves, not a second rendering of it — what a
+            reader sees here is byte-for-byte what lands in the README. */}
+        <img src={cardUrl(slug)} alt={`Commit Chronicles card for ${slug.slug}`} />
       </div>
 
-      <div className="result__grid">
-        <div>
-          <div className="card-frame">
-            {/* The preview is the card the bucket serves, not a second rendering of it —
-                what a judge sees here is byte-for-byte what lands in the README. */}
-            <img src={cardUrl(slug)} alt={`Commit Chronicles card for ${slug.slug}`} />
-          </div>
-          <p className="card-note">1200 × 630 · social + README preview size</p>
-        </div>
+      <p className="card-note">1200 × 630 · social + README preview size</p>
 
-        <div className="actions">
+      <div className="takeaway">
+        <div className="takeaway__buttons">
           <button
             type="button"
             className="btn-primary btn-block"
@@ -65,26 +64,26 @@ export function Result({ slug, onHome }: ResultProps): JSX.Element {
           >
             {imageCopied ? '✓ copied' : 'Copy card image'}
           </button>
-
-          <div style={{ marginTop: 12 }}>
-            <p className="actions__label">Embed in your README</p>
-            <code className="embed">{embed}</code>
-            <button
-              type="button"
-              className="btn-ghost"
-              onClick={() => {
-                copyEmbed(embed);
-              }}
-            >
-              {embedCopied ? '✓ copied markdown' : 'Copy README embed'}
-            </button>
-          </div>
-
-          <button type="button" className="btn-quiet" onClick={onHome}>
-            ← read another repo
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => {
+              copyEmbed(embed);
+            }}
+          >
+            {embedCopied ? '✓ copied markdown' : 'Copy README embed'}
           </button>
         </div>
+
+        <div className="takeaway__embed">
+          <p className="actions__label">Embed in your README</p>
+          <code className="embed">{embed}</code>
+        </div>
       </div>
+
+      <button type="button" className="btn-quiet" onClick={onHome}>
+        ← read another repo
+      </button>
     </main>
   );
 }

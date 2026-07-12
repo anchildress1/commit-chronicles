@@ -136,9 +136,9 @@ body {
 }
 
 .stage--result {
-  max-width: 1120px;
-  padding: 5vh 40px 14vh;
-  text-align: left;
+  max-width: 1140px;
+  padding: 4vh 40px 12vh;
+  text-align: center;
 }
 
 .eyebrow {
@@ -391,34 +391,17 @@ body {
   color: var(--dim);
 }
 
-.result__head {
-  display: grid;
-  gap: 8px;
-  text-align: center;
-  margin-bottom: 38px;
-}
-
-.result__head h2 {
-  max-width: 24ch;
-  margin-inline: auto;
-}
-
-.result__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 660px) minmax(0, 320px);
-  gap: 44px;
-  justify-content: center;
-  align-items: start;
-}
-
 .card-frame {
   width: 100%;
-  max-width: 660px;
+  /* The story has to be legible at a glance. The card is not an illustration next to the
+     content — it is the content. */
+  max-width: 1060px;
+  margin: 0 auto;
   aspect-ratio: 1200 / 630;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.85);
-  border: 1px solid rgba(238, 241, 247, 0.1);
+  box-shadow: 0 50px 110px -45px rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(238, 241, 247, 0.12);
 }
 
 .card-frame img {
@@ -436,16 +419,30 @@ body {
   text-align: center;
 }
 
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .btn-block {
   border-radius: 10px;
   padding: 15px;
   text-align: center;
+}
+
+.takeaway {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 620px);
+  gap: 28px;
+  align-items: start;
+  justify-content: center;
+  margin: 30px auto 0;
+  text-align: left;
+}
+
+.takeaway__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.takeaway__embed {
+  min-width: 0;
 }
 
 .actions__label {
@@ -474,7 +471,6 @@ body {
 .btn-ghost {
   cursor: pointer;
   width: 100%;
-  margin-top: 10px;
   background: transparent;
   border: 1px solid var(--line);
   color: var(--muted);
@@ -530,7 +526,7 @@ body {
 }
 
 @media (max-width: 900px) {
-  .result__grid {
+  .takeaway {
     grid-template-columns: minmax(0, 1fr);
   }
 }

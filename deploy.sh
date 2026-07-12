@@ -33,12 +33,24 @@ WORKER_URL="$(gcloud run services describe "${SERVICE}" \
   --project "${PROJECT}" --region "${REGION}" \
   --format 'value(status.url)' 2>/dev/null || true)"
 
-# Cost shape, deliberately:
-#   --min-instances 0      scale to zero; an idle day costs nothing
-#   (no --no-cpu-throttling) generation runs inside a Cloud Tasks request, so CPU is
-#                          billed only while work is actually happening
-#   --max-instances 2      a viral card cannot outrun the wallet
-#   --concurrency 80       the serving path is bucket reads; one instance absorbs a crowd
+# Cost shape, deliberately. Cloud Run never serves a card — the public bucket does — so the
+# only thing billed here is the page shell and the generation itself.
+#
+#   --min-instances 0        scale to zero; an idle day costs nothing. Any minimum instance
+#                            is billed around the clock at the idle rate.
+#   (no --no-cpu-throttling) request-based billing: CPU is charged only while a request is
+#                            actually in flight, not for the life of the instance.
+#   --no-cpu-boost           startup boost bills at DOUBLE CPU through startup. gcloud leaves
+#                            it "unspecified" on new services, so it is pinned off here.
+#   --execution-environment gen1
+#                            same price as gen2, but faster cold starts — and a service that
+#                            scales to zero cold-starts constantly.
+#   --cpu 1 / --concurrency 80
+#                            CPU below 1 forces concurrency to 1, so every visitor would need
+#                            an instance of their own. One vCPU is both cheaper and faster.
+#   --max-instances 2        the ceiling on a bad day.
+#   --timeout 600            bounds the worst case: a generation wedged on Snowflake bills
+#                            until it is killed. The page stops waiting at five minutes.
 echo "==> deploying ${SERVICE}"
 ENV_VARS="GOOGLE_CLOUD_PROJECT=${PROJECT},CARD_BUCKET=${CARD_BUCKET},DAILY_GENERATION_CAP=${DAILY_GENERATION_CAP},SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT:?set SNOWFLAKE_ACCOUNT},SNOWFLAKE_USER=${SNOWFLAKE_USER:?set SNOWFLAKE_USER}"
 
@@ -65,8 +77,9 @@ gcloud run deploy "${SERVICE}" \
   --concurrency 80 \
   --min-instances 0 \
   --max-instances 2 \
-  --timeout 900 \
-  --execution-environment gen2 \
+  --timeout 600 \
+  --no-cpu-boost \
+  --execution-environment gen1 \
   --set-env-vars "${ENV_VARS}" \
   --set-secrets "SNOWFLAKE_PAT=SNOWFLAKE_PAT:latest"
 

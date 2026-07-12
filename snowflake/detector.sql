@@ -395,11 +395,20 @@ SELECT
         'lastCommitAt',       TO_VARCHAR(f.LAST_COMMIT_AT),
         'lastCommitSubject',  f.LAST_COMMIT_SUBJECT,
         'windowed',           f.WINDOWED,
-        'largestGap',         IFF(g.GAP_DAYS IS NULL, NULL, OBJECT_CONSTRUCT(
-            'days', g.GAP_DAYS,
-            'from', TO_VARCHAR(g.DARK_FROM),
-            'to',   TO_VARCHAR(g.DARK_TO)
-        ))
+        -- The gap only reaches the card when the gap IS the story. Every repo has a longest
+        -- silence, and handing it over unconditionally put a second, unrelated storyline on
+        -- a nocturne card: Cortex is passed GAP_DAYS and writes about the dark stretch, and
+        -- the renderer draws a void panel for it. One card, one story — so a storyline whose
+        -- drama is not the silence does not get told about it.
+        'largestGap',         IFF(
+            g.GAP_DAYS IS NULL
+            OR COALESCE(s.STORYLINE, 'none') NOT IN ('relapse', 'resurrection', 'collapse'),
+            NULL,
+            OBJECT_CONSTRUCT(
+                'days', g.GAP_DAYS,
+                'from', TO_VARCHAR(g.DARK_FROM),
+                'to',   TO_VARCHAR(g.DARK_TO)
+            ))
     )                                        AS FACTS
 FROM REPO_FACTS f
 LEFT JOIN REPO_LARGEST_GAP g USING (REPO_OWNER, REPO_NAME)
@@ -494,6 +503,31 @@ picked AS (
     FROM COMMIT_LINES l
     JOIN REPO_STORYLINE w USING (REPO_OWNER, REPO_NAME)
     JOIN budget       t USING (REPO_OWNER, REPO_NAME)
+    CROSS JOIN DETECTOR_CONFIG cfg
+    -- Cortex sees only the window the storyline was actually found in. A nocturne is a claim
+    -- about the night, so showing it the daylight commits invites a card about something
+    -- else. The storylines whose drama IS the whole arc — a silence, a collapse, a return —
+    -- keep the full history, because for them the arc is the evidence.
+    -- COALESCE to TRUE, not FALSE: an unparseable bound would otherwise filter every line
+    -- away and hand Cortex an empty card. Falling back to the whole history is a worse story;
+    -- falling back to no story at all is a broken one.
+    WHERE CASE COALESCE(w.STORYLINE, 'none')
+              WHEN 'nocturne' THEN
+                  l.UTC_HOUR >= cfg.NIGHT_START_HOUR OR l.UTC_HOUR < cfg.NIGHT_END_HOUR
+              WHEN 'binge' THEN
+                  COALESCE(
+                      DATE(l.AUTHORED_AT)
+                          BETWEEN TRY_TO_DATE(w.EVIDENCE:streakStart::STRING)
+                              AND TRY_TO_DATE(w.EVIDENCE:streakEnd::STRING),
+                      TRUE)
+              WHEN 'fight' THEN
+                  COALESCE(
+                      l.AUTHORED_AT
+                          BETWEEN TRY_TO_TIMESTAMP_TZ(w.EVIDENCE:windowStart::STRING)
+                              AND TRY_TO_TIMESTAMP_TZ(w.EVIDENCE:windowEnd::STRING),
+                      TRUE)
+              ELSE TRUE
+          END
     QUALIFY
         -- SHA and PART break the last tie: rebases and batch pushes share an AUTHORED_AT,
         -- and without them the lines Cortex sees could differ between reads.

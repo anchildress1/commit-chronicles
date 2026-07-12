@@ -120,8 +120,7 @@ flowchart TD
         JSON["JSON card payload"]
 
         EAI --> ING --> DET --> SCORE --> EV --> CTX --> VAL --> JSON
-        SCORE -.->|"storyline none"| JSON
-        VAL -.->|"rejected"| FAIL["failed<br/>cortex_rejected"]
+        SCORE -.->|"storyline none, Cortex skipped"| JSON
     end
 
     REN["Cloud Run<br/>renders the SVG"]

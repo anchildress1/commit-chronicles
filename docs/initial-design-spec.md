@@ -18,7 +18,7 @@ Scope is **one repository**, not a whole profile. A profile year-in-review turns
 - A durable generation state: `generating`, `ready`, `failed`.
 - A generated SVG card sized for README and social previews.
 - A copyable Markdown embed.
-- A cached public page at `/{owner}/{repo}` and a card at `/{owner}/{repo}/card.svg`.
+- A cached public page at `/{owner}/{repo}` and a card served directly from the public GCS bucket.
 - A gallery of pre-generated cards for judge-safe demo coverage.
 
 ## The card
@@ -68,7 +68,7 @@ The browser tab must not be required for generation to complete. If it is, the a
 - Primary action: **Copy card image**.
 - Secondary action: **Copy README embed**.
   ```md
-  [![Commit Chronicle](https://commitchronicles.dev/{owner}/{repo}/card.svg)](https://commitchronicles.dev/{owner}/{repo})
+  [![Commit Chronicles](https://storage.googleapis.com/commit-chronicles-cards/cards/{owner}/{repo}/card.svg)](https://commitchronicles.dev/{owner}/{repo})
   ```
 - Link to read another repo.
 
@@ -102,7 +102,7 @@ Snowflake
    ▼
 Cloud Run  templates the SVG → writes gs://…/{owner}/{repo}/card.svg
    ▼
-Public GCS bucket  (serving every cached page + card; the file's existence is the state)
+Public GCS bucket  (serving cards and storing state; the card's existence is ready)
 ```
 
 **Generation goes through a queue, and that is a cost decision.** The work has to outlive
@@ -120,11 +120,12 @@ the invoker service account before it spends anything. No token, no work.
 
 - **Snowflake** reaches GitHub itself via an external access integration, finds the story in SQL, and narrates it with Cortex. The ingest layer is a stored procedure, not a service.
 - **Cloud Run** owns the routes, calls one Snowflake proc, and turns the returned payload into an SVG. It fetches no commit data and computes no analysis.
-- **The GCS bucket** is the cache of record. A cached page or card never re-runs Cortex.
+- **The GCS bucket** is the cache of record and serves cards directly. Cloud Run serves the
+  SPA and `/api/state`; a cached render never calls Snowflake or GitHub.
 
 **Rendering lives in Cloud Run, not Snowflake.** Templating an SVG string is a chore, not a demonstration of a data warehouse — and doing it in-warehouse would drag a `STORAGE INTEGRATION`, an external stage, and a Snowflake-minted service-account IAM grant onto the critical path to buy nothing. The Snowflake case rests on the ingest, the detector, and the Cortex call. Cloud Run writes to the bucket with ordinary GCP credentials.
 
-Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are RBAC-gated and hand a browser a login page. Cloud Run serves the card.
+Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are RBAC-gated and hand a browser a login page. The public GCS bucket serves the card; Cloud Run serves the page and API.
 
 ## Snowflake objects
 
@@ -141,7 +142,6 @@ Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are
 | `CHRONICLE_CARD` (UDF)                              | hand-written wrapper around `AI_COMPLETE`; one structured call → the whole card                         |
 | `CARDS`                                             | the generated card payloads, plus the Cortex query id for cost audit                                    |
 | `PROC READ_REPO(owner, repo)`                       | the one entry point: ingests on a cold repo, then detector → `CHRONICLE_CARD` → structured card payload |
-| `TASK`                                              | scheduled regeneration for the gallery                                                                  |
 
 Every object is SQL in the repo, deployed with the `snow` CLI. An object created by clicking in a UI does not exist.
 
@@ -264,4 +264,4 @@ Show the SQL in the writeup. Do not bury the expensive toy after buying it.
 
 ## Labels
 
-Project **Commit Chronicles** · repo `commit-chronicles` · route `/{owner}/{repo}` · card endpoint `/{owner}/{repo}/card.svg` · generation endpoint `/api/generate`.
+Project **Commit Chronicles** · repo `commit-chronicles` · route `/{owner}/{repo}` · card object `https://storage.googleapis.com/commit-chronicles-cards/cards/{owner}/{repo}/card.svg` · state endpoint `/api/state/{owner}/{repo}` · generation endpoint `/api/generate`.

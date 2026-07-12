@@ -2,6 +2,7 @@ import type { CardStore, JobState } from './bucket.js';
 import type { SnowflakeClient } from './snowflake.js';
 import type { Config } from './config.js';
 import type { TaskQueue } from './queue.js';
+import { TaskNotCreatedError } from './queue.js';
 import type { RepoSlug } from '../shared/slug.js';
 import { isRetryable } from '../shared/errors.js';
 import { renderCard } from './card/svg.js';
@@ -113,25 +114,13 @@ export function createGenerator(deps: GeneratorDeps): Generator {
         }
       }
 
-      // The claim below is create-only, so any marker standing in its place has to go
-      // first: a retryable failure we are about to re-run, or a dead run's abandoned claim.
-      if (state.status !== 'unknown') {
-        await store.clearState(slug.owner, slug.repo);
-      }
-
-      if (!(await store.claimDailyQuota(config.dailyGenerationCap, today(now())))) {
-        log('quota exceeded', { repo: slug.slug });
-        return {
-          accepted: false,
-          reason: 'quota_exceeded',
-          state: { status: 'unknown', repo: slug.slug },
-        };
-      }
-
-      // The claim is a create-only write. Two requests for the same cold repo reach here
-      // together — the readState above cannot separate them — and exactly one wins. The
-      // loser is told it is already generating rather than enqueueing a second Cortex call.
-      const claimed = await store.claimGenerating(slug.owner, slug.repo);
+      // Replacing a retryable/dead marker is conditional on the exact state we read. Two
+      // retries cannot delete or overwrite each other's fresh claim.
+      const claimed = await store.claimGenerating(
+        slug.owner,
+        slug.repo,
+        state.status === 'unknown' ? undefined : state,
+      );
       if (!claimed) {
         return {
           accepted: false,
@@ -140,12 +129,35 @@ export function createGenerator(deps: GeneratorDeps): Generator {
         };
       }
 
+      const quotaDate = today(now());
+      let hasQuota: boolean;
+      try {
+        hasQuota = await store.claimDailyQuota(config.dailyGenerationCap, quotaDate);
+      } catch (error) {
+        await store.clearState(slug.owner, slug.repo);
+        throw error;
+      }
+
+      if (!hasQuota) {
+        await store.clearState(slug.owner, slug.repo);
+        log('quota exceeded', { repo: slug.slug });
+        return {
+          accepted: false,
+          reason: 'quota_exceeded',
+          state: { status: 'unknown', repo: slug.slug },
+        };
+      }
+
       try {
         await queue.enqueue(slug);
       } catch (error) {
+        if (!(error instanceof TaskNotCreatedError)) throw error;
         // Nothing will ever pick this up, so release the claim instead of stranding the
         // repo on `generating` until the TTL lapses.
-        await store.clearState(slug.owner, slug.repo);
+        await Promise.all([
+          store.clearState(slug.owner, slug.repo),
+          store.releaseDailyQuota(quotaDate),
+        ]);
         throw error;
       }
 

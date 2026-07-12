@@ -39,9 +39,11 @@ export function fakeStore(): FakeStore {
       );
     },
 
-    claimGenerating: (owner, repo) => {
-      // Create-only, exactly like the bucket: a claim that already exists cannot be taken.
-      if (states.has(key(owner, repo))) return Promise.resolve(false);
+    claimGenerating: (owner, repo, expected) => {
+      const current = states.get(key(owner, repo));
+      if (expected ? JSON.stringify(current) !== JSON.stringify(expected) : current !== undefined) {
+        return Promise.resolve(false);
+      }
 
       writes.push(`generating:${key(owner, repo)}`);
       states.set(key(owner, repo), {
@@ -80,6 +82,11 @@ export function fakeStore(): FakeStore {
       if (store.quotaUsed >= cap) return Promise.resolve(false);
       store.quotaUsed += 1;
       return Promise.resolve(true);
+    },
+
+    releaseDailyQuota: () => {
+      store.quotaUsed = Math.max(0, store.quotaUsed - 1);
+      return Promise.resolve();
     },
   };
 

@@ -11,7 +11,7 @@ class GcsError extends Error {
 
 interface FakeObject {
   data: string;
-  generation: number;
+  generation: number | string;
   custom: Record<string, string>;
 }
 
@@ -25,11 +25,14 @@ function fakeStorage(objects = new Map<string, FakeObject>()) {
 
   const storage = {
     bucket: () => ({
-      file: (path: string) => ({
+      file: (path: string, options?: { generation?: string }) => ({
         download: () => {
           downloads.push(path);
           const object = objects.get(path);
           if (!object) return Promise.reject(new GcsError(404));
+          if (options?.generation && options.generation !== String(object.generation)) {
+            return Promise.reject(new GcsError(404));
+          }
           return Promise.resolve([Buffer.from(object.data, 'utf8')]);
         },
         exists: () => Promise.resolve([objects.has(path)]),
@@ -39,17 +42,18 @@ function fakeStorage(objects = new Map<string, FakeObject>()) {
           return Promise.resolve([{ generation: object.generation, metadata: object.custom }]);
         },
         save: (data: string, options?: Record<string, unknown>) => {
-          const expected = (options?.['preconditionOpts'] as { ifGenerationMatch?: number })
-            ?.ifGenerationMatch;
+          const expected = (
+            options?.['preconditionOpts'] as { ifGenerationMatch?: number | string }
+          )?.ifGenerationMatch;
           const current = objects.get(path)?.generation ?? 0;
-          if (expected !== undefined && expected !== current) {
+          if (expected !== undefined && String(expected) !== String(current)) {
             return Promise.reject(new GcsError(412));
           }
           const metadata = options?.['metadata'] as
             { cacheControl?: unknown; metadata?: Record<string, string> } | undefined;
           objects.set(path, {
             data,
-            generation: current + 1,
+            generation: String(BigInt(current) + 1n),
             custom: metadata?.metadata ?? {},
           });
           saved.push({
@@ -247,6 +251,75 @@ describe('claimGenerating', () => {
 
     await expect(cards.claimGenerating('atlas', 'pipeline')).resolves.toBe(true);
   });
+
+  it('replaces only the exact failed marker the caller observed', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+    await cards.markFailed('atlas', 'pipeline', 'pipeline_error');
+    const failed = await cards.readState('atlas', 'pipeline');
+
+    await expect(cards.claimGenerating('atlas', 'pipeline', failed)).resolves.toBe(true);
+    await expect(cards.claimGenerating('atlas', 'pipeline', failed)).resolves.toBe(false);
+  });
+
+  it('preserves an opaque generation above the JavaScript safe integer range', async () => {
+    const fake = fakeStorage();
+    const failed = {
+      status: 'failed' as const,
+      repo: 'atlas/pipeline',
+      errorCode: 'pipeline_error',
+      failedAt: new Date().toISOString(),
+    };
+    fake.objects.set('cards/atlas/pipeline/state.json', {
+      data: JSON.stringify(failed),
+      generation: '9007199254740993',
+      custom: {},
+    });
+
+    await expect(store(fake).claimGenerating('atlas', 'pipeline', failed)).resolves.toBe(true);
+  });
+
+  it('refuses replacement when the marker changes after its generation is read', async () => {
+    const fake = fakeStorage();
+    const failed = {
+      status: 'failed' as const,
+      repo: 'atlas/pipeline',
+      errorCode: 'pipeline_error',
+      failedAt: new Date().toISOString(),
+    };
+    fake.objects.set('cards/atlas/pipeline/state.json', {
+      data: JSON.stringify(failed),
+      generation: 1,
+      custom: {},
+    });
+    const originalBucket = fake.storage.bucket();
+    let replaced = false;
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: (path: string, options?: { generation?: string }) => {
+        const file = originalBucket.file(path, options);
+        return {
+          ...file,
+          getMetadata: async () => {
+            const metadata = await file.getMetadata();
+            if (!replaced && path.endsWith('/state.json')) {
+              replaced = true;
+              await originalBucket.file(path).save(
+                JSON.stringify({
+                  status: 'generating',
+                  repo: 'atlas/pipeline',
+                  startedAt: new Date().toISOString(),
+                }),
+              );
+            }
+            return metadata;
+          },
+        };
+      },
+    });
+    const cards = store(fake);
+
+    await expect(cards.claimGenerating('atlas', 'pipeline', failed)).resolves.toBe(false);
+  });
 });
 
 describe('claimDailyQuota', () => {
@@ -300,6 +373,148 @@ describe('claimDailyQuota', () => {
     });
 
     await expect(store(fake).claimDailyQuota(100, TODAY)).resolves.toBe(false);
+  });
+
+  it('returns a reserved slot when queue admission fails', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+
+    await cards.claimDailyQuota(1, TODAY);
+    await cards.releaseDailyQuota(TODAY);
+
+    await expect(cards.claimDailyQuota(1, TODAY)).resolves.toBe(true);
+  });
+
+  it('does nothing when there is no quota reservation to return', async () => {
+    const cards = store(fakeStorage());
+
+    await expect(cards.releaseDailyQuota(TODAY)).resolves.toBeUndefined();
+  });
+
+  it('retries a quota release after a concurrent writer wins', async () => {
+    const fake = fakeStorage();
+    const cards = store(fake);
+    await cards.claimDailyQuota(2, TODAY);
+    const bucket = fake.storage.bucket();
+    let blocked = false;
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: (path: string, options?: { generation?: string }) => {
+        const file = bucket.file(path, options);
+        return {
+          ...file,
+          save: (data: string, saveOptions?: Record<string, unknown>) => {
+            if (!blocked && path.includes('/quota/')) {
+              blocked = true;
+              return Promise.reject(new GcsError(412));
+            }
+            return file.save(data, saveOptions);
+          },
+        };
+      },
+    });
+
+    await cards.releaseDailyQuota(TODAY);
+
+    await expect(cards.claimDailyQuota(1, TODAY)).resolves.toBe(true);
+  });
+
+  it('retries a quota release when the observed generation is replaced before download', async () => {
+    const fake = fakeStorage();
+    fake.objects.set(`meta/quota/${TODAY}.json`, {
+      data: JSON.stringify({ count: 1 }),
+      generation: 1,
+      custom: {},
+    });
+    const bucket = fake.storage.bucket();
+    let replaced = false;
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: (path: string, options?: { generation?: string }) => {
+        const file = bucket.file(path, options);
+        return {
+          ...file,
+          getMetadata: async () => {
+            const metadata = await file.getMetadata();
+            if (!replaced && path.includes('/quota/')) {
+              replaced = true;
+              await bucket.file(path).save(JSON.stringify({ count: 2 }));
+            }
+            return metadata;
+          },
+        };
+      },
+    });
+    const cards = store(fake);
+
+    await cards.releaseDailyQuota(TODAY);
+
+    expect(JSON.parse(fake.objects.get(`meta/quota/${TODAY}.json`)?.data ?? '{}')).toEqual({
+      count: 1,
+    });
+  });
+
+  it('propagates a quota release storage failure', async () => {
+    const fake = fakeStorage();
+    fake.objects.set(`meta/quota/${TODAY}.json`, {
+      data: JSON.stringify({ count: 1 }),
+      generation: 1,
+      custom: {},
+    });
+    const bucket = fake.storage.bucket();
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: (path: string, options?: { generation?: string }) => ({
+        ...bucket.file(path, options),
+        save: () => Promise.reject(new GcsError(500)),
+      }),
+    });
+    const cards = store(fake);
+
+    await expect(cards.releaseDailyQuota(TODAY)).rejects.toThrow('gcs 500');
+  });
+
+  it('fails loudly after five quota release contention losses', async () => {
+    const fake = fakeStorage();
+    fake.objects.set(`meta/quota/${TODAY}.json`, {
+      data: JSON.stringify({ count: 1 }),
+      generation: 1,
+      custom: {},
+    });
+    const bucket = fake.storage.bucket();
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: (path: string, options?: { generation?: string }) => ({
+        ...bucket.file(path, options),
+        save: () => Promise.reject(new GcsError(412)),
+      }),
+    });
+    const cards = store(fake);
+
+    await expect(cards.releaseDailyQuota(TODAY)).rejects.toThrow(
+      `could not release daily quota for ${TODAY}`,
+    );
+  });
+
+  it('fails loudly after five unstable snapshot reads', async () => {
+    const fake = fakeStorage();
+    fake.objects.set(`meta/quota/${TODAY}.json`, {
+      data: JSON.stringify({ count: 1 }),
+      generation: 1,
+      custom: {},
+    });
+    const bucket = fake.storage.bucket();
+    let downloads = 0;
+    vi.spyOn(fake.storage, 'bucket').mockReturnValue({
+      file: (path: string, options?: { generation?: string }) => ({
+        ...bucket.file(path, options),
+        download: () => {
+          downloads += 1;
+          return Promise.reject(new GcsError(404));
+        },
+      }),
+    });
+
+    await expect(store(fake).releaseDailyQuota(TODAY)).rejects.toThrow(
+      `could not read a stable snapshot of meta/quota/${TODAY}.json`,
+    );
+    expect(downloads).toBe(5);
   });
 });
 

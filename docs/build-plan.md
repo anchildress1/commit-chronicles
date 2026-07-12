@@ -11,10 +11,15 @@
 ## Architecture
 
 ```
-Cloud Run (static SPA + one route, no analysis)
-   │  type owner/repo → POST /api/generate ──────────────┐
-   │                                                     ▼
-   │                                                Snowflake
+Cloud Run (static SPA + API, no analysis)
+   │  POST /api/generate → guard, claim, enqueue
+   ▼
+Cloud Tasks
+   │  OIDC POST /internal/generate
+   ▼
+Cloud Run worker ────────────────────────────────────────┐
+                                                         ▼
+                                                    Snowflake
    │                                                  ├─ ingest proc   external access → api.github.com → COMMITS
    │                                                  ├─ detector      plain SQL: gaps, streaks, hours → pick ONE thread
    │                                                  └─ cortex        narrates it + picks the palette (hex + mood)
@@ -26,30 +31,32 @@ Cloud Run renders the SVG → writes it to the bucket
 public GCS bucket ──► README <img> · dev.to embed
 ```
 
-Snowflake gets its own data, finds the story, and reads it. Cloud Run serves the page, calls one proc, and turns the payload into an SVG. **The card in the bucket is the state** — if the file exists, it's ready.
+Snowflake gets its own data, finds the story, and reads it. Cloud Run serves the page and
+API, queues durable work, calls one proc in the worker request, and turns the payload into
+an SVG. **The card in the bucket is the state** — if the file exists, it is ready. The
+browser polls `/api/state/{owner}/{repo}`; it never calls the bucket for state.
 
 **Rendering is Cloud Run's job, not Snowflake's.** Templating an SVG proves nothing about a warehouse, and doing it in-warehouse would put a `STORAGE INTEGRATION`, an external stage, and a service-account IAM grant on the critical path for zero narrative gain. Cloud Run has to exist anyway; it writes to GCS with ordinary credentials.
 
 ## Tooling
 
-- **Snowflake MCP (self-hosted, `Snowflake-Labs/mcp`)** — Cortex plus object management and SQL orchestration. This is what lets Claude create the network rule, secret, integration, procs, and task.
+- **Snowflake MCP (self-hosted, `Snowflake-Labs/mcp`)** — Cortex plus object management and SQL orchestration. This is what lets Claude create the network rule, secret, integration, and procedures.
 - **Snowflake connector (directory)** — Cortex Agents / Cortex Search. Retrieval only; good for querying, not for DDL.
 - **`snow` CLI** — every object lives as SQL in the repo and deploys with one command. Reproducible, reviewable, and it's what the writeup screenshots.
 
 ## Snowflake objects (the whole app)
 
-| object                                              | job                                                        | status                      |
-| --------------------------------------------------- | ---------------------------------------------------------- | --------------------------- |
-| `GITHUB_API_RULE` (EGRESS, `api.github.com`)        | let the warehouse out                                      | ✅ deployed                 |
-| `GITHUB_TOKEN` (`SECRET`)                           | GitHub token                                               | ✅ deployed                 |
-| `GITHUB_API_ACCESS` (`EXTERNAL ACCESS INTEGRATION`) | binds rule + secret                                        | ✅ deployed                 |
-| `COMMITS`                                           | owner, repo, sha, subject, body, authored_at, bot/AI flags | ✅ deployed                 |
-| `PROC INGEST_REPO_COMMITS(owner, repo)`             | Python + external access → REST Commits API → `COMMITS`    | ✅ deployed                 |
-| `COMMITS_CLEAN` (view)                              | drops merges + bots, derives date/hour parts               | ✅ deployed                 |
-| detector views                                      | gaps, streaks, night share, drama scores → one winner      | 🔨 `snowflake/detector.sql` |
-| `CARD_EVIDENCE` (view)                              | the winning thread's ~20 commits — all Cortex ever sees    | 🔨 `snowflake/detector.sql` |
-| `PROC READ_REPO(owner, repo)`                       | ingest if cold → detector → Cortex → card payload JSON     | ✅ deployed                 |
-| `TASK`                                              | scheduled regeneration                                     | ⬜ cuttable                 |
+| object                                              | job                                                        | status      |
+| --------------------------------------------------- | ---------------------------------------------------------- | ----------- |
+| `GITHUB_API_RULE` (EGRESS, `api.github.com`)        | let the warehouse out                                      | ✅ deployed |
+| `GITHUB_TOKEN` (`SECRET`)                           | GitHub token                                               | ✅ deployed |
+| `GITHUB_API_ACCESS` (`EXTERNAL ACCESS INTEGRATION`) | binds rule + secret                                        | ✅ deployed |
+| `COMMITS`                                           | owner, repo, sha, subject, body, authored_at, bot/AI flags | ✅ deployed |
+| `PROC INGEST_REPO_COMMITS(owner, repo)`             | Python + external access → REST Commits API → `COMMITS`    | ✅ deployed |
+| `COMMITS_CLEAN` (view)                              | drops merges + bots, derives date/hour parts               | ✅ deployed |
+| detector views                                      | gaps, streaks, night share, drama scores → one winner      | ✅ scripted |
+| `CARD_EVIDENCE` (view)                              | the winning thread's ~20 commits — all Cortex ever sees    | ✅ scripted |
+| `PROC READ_REPO(owner, repo)`                       | ingest if cold → detector → Cortex → card payload JSON     | ✅ deployed |
 
 No `STORAGE INTEGRATION` and no external stage — Cloud Run owns the bucket.
 
@@ -118,12 +125,12 @@ Detection is free SQL. Cortex sees ~20 commits, not thousands. Cloud Run scales 
 
 - **Font rendering in the SVG** — GitHub proxies README images through camo, so webfonts won't load. Fix is a base64-embedded subset. Deferred by decision.
 - **Anonymous serving** — Snowflake will not answer an anonymous HTTP request (SPCS "public" endpoints are RBAC-gated; a browser gets a login page). The public GCS bucket is the answer.
-- **Async generation** — a run takes ~20–40s. The page polls the bucket, so closing the tab doesn't kill it.
+- **Async generation** — Cloud Tasks owns the durable worker request. The page polls
+  `/api/state`, so closing the tab does not affect the job.
 
 ## Cut first if behind
 
-1. The scheduled `TASK` (generate by hand).
-2. Extra story types (ship `relapse` + `nocturne` only).
-3. The gallery page.
+1. Extra story types (ship `relapse` + `nocturne` only).
+2. The gallery page.
 
 **Never cut:** external-access ingest · the detector SQL · the Cortex call including the palette pick · the SVG card · the writeup showing the SQL.

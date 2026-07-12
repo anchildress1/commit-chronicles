@@ -1,5 +1,6 @@
 import { CloudTasksClient } from '@google-cloud/tasks';
 import { OAuth2Client } from 'google-auth-library';
+import { randomUUID } from 'node:crypto';
 import type { Config } from './config.js';
 import type { RepoSlug } from '../shared/slug.js';
 
@@ -9,6 +10,17 @@ import type { RepoSlug } from '../shared/slug.js';
 export interface TaskQueue {
   enqueue(slug: RepoSlug): Promise<void>;
 }
+
+/** Queue admission failed and reconciliation proved that no task exists. */
+export class TaskNotCreatedError extends Error {
+  constructor(override readonly cause: unknown) {
+    super('cloud task was not created', { cause });
+    this.name = 'TaskNotCreatedError';
+  }
+}
+
+const DEFINITELY_NOT_CREATED = new Set([3, 5, 7, 9, 16]);
+const CREATE_ATTEMPTS = 3;
 
 /** Verifies that a worker request really came from our queue, not from the open internet. */
 export interface TaskAuthenticator {
@@ -20,22 +32,27 @@ export interface TaskAuthenticator {
  *
  * @throws {Error} When Cloud Tasks is not configured.
  */
-export function createCloudTasksQueue(config: Config): TaskQueue {
+export function createCloudTasksQueue(
+  config: Config,
+  client = new CloudTasksClient(),
+  taskId: () => string = randomUUID,
+): TaskQueue {
   const tasks = config.tasks;
   if (!tasks) {
     throw new Error('cloud tasks is not configured');
   }
 
-  const client = new CloudTasksClient();
   const parent = client.queuePath(tasks.project, tasks.location, tasks.queue);
 
   return {
     async enqueue(slug) {
-      await client.createTask({
+      const name = client.taskPath(tasks.project, tasks.location, tasks.queue, taskId());
+      const request = {
         parent,
         task: {
+          name,
           httpRequest: {
-            httpMethod: 'POST',
+            httpMethod: 'POST' as const,
             url: `${tasks.workerUrl}/internal/generate`,
             headers: { 'content-type': 'application/json' },
             body: Buffer.from(JSON.stringify({ repo: slug.slug })).toString('base64'),
@@ -46,9 +63,30 @@ export function createCloudTasksQueue(config: Config): TaskQueue {
           },
           dispatchDeadline: { seconds: 900 },
         },
-      });
+      };
+
+      for (let attempt = 0; attempt < CREATE_ATTEMPTS; attempt += 1) {
+        try {
+          await client.createTask(request);
+          return;
+        } catch (error) {
+          const status = statusOf(error);
+          if (status === 6) return;
+          if (status !== undefined && DEFINITELY_NOT_CREATED.has(status)) {
+            throw new TaskNotCreatedError(error);
+          }
+          if (attempt === CREATE_ATTEMPTS - 1) throw error;
+          // The task name makes retries idempotent: a committed first attempt answers
+          // ALREADY_EXISTS instead of creating duplicate paid work.
+        }
+      }
     },
   };
+}
+
+function statusOf(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  return typeof error.code === 'number' ? error.code : undefined;
 }
 
 /**

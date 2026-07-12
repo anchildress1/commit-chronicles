@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGenerator, runGeneration, type Generator } from '../../src/server/generate.js';
+import { TaskNotCreatedError } from '../../src/server/queue.js';
 import type { Config } from '../../src/server/config.js';
 import { parseSlug } from '../../src/shared/slug.js';
 import { CARD } from '../fixtures/card.js';
@@ -201,12 +202,13 @@ describe('start', () => {
   it('lets one of two concurrent requests for a cold repo through, not both', async () => {
     // readState cannot separate them: both see `unknown`. The claim is what decides, and a
     // second Cortex call for one repo is money.
-    const { generator, queue, snowflake } = harness(() => CARD);
+    const { generator, store, queue, snowflake } = harness(() => CARD);
 
     const [a, b] = await Promise.all([generator.start(SLUG), generator.start(SLUG)]);
 
     expect([a.accepted, b.accepted].filter(Boolean)).toHaveLength(1);
     expect(queue.enqueued).toHaveLength(1);
+    expect(store.quotaUsed).toBe(1);
 
     await queue.deliver();
     expect(snowflake.calls).toEqual(['atlas/pipeline']);
@@ -217,12 +219,13 @@ describe('start', () => {
     const store = fakeStore();
     const snowflake = fakeSnowflake(() => CARD);
     const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
-    queue.enqueue = () => Promise.reject(new Error('queue is down'));
+    queue.enqueue = () => Promise.reject(new TaskNotCreatedError(new Error('queue is down')));
 
     const generator = createGenerator({ store, snowflake, config: config(), queue });
 
-    await expect(generator.start(SLUG)).rejects.toThrow('queue is down');
+    await expect(generator.start(SLUG)).rejects.toThrow('cloud task was not created');
     expect(store.states.get('atlas/pipeline')).toBeUndefined();
+    expect(store.quotaUsed).toBe(0);
 
     // And the repo can still be read once the queue is back.
     const recovered = createGenerator({
@@ -232,6 +235,47 @@ describe('start', () => {
       queue: fakeQueue((slug) => runGeneration({ store, snowflake }, slug)),
     });
     await expect(recovered.start(SLUG)).resolves.toMatchObject({ accepted: true });
+    expect(store.quotaUsed).toBe(1);
+  });
+
+  it('releases the claim when quota storage fails', async () => {
+    const store = fakeStore();
+    store.claimDailyQuota = () => Promise.reject(new Error('quota store is down'));
+    const snowflake = fakeSnowflake(() => CARD);
+    const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+    const generator = createGenerator({ store, snowflake, config: config(), queue });
+
+    await expect(generator.start(SLUG)).rejects.toThrow('quota store is down');
+    expect(store.states.get('atlas/pipeline')).toBeUndefined();
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('retains the claim and quota when queue admission is ambiguous', async () => {
+    const store = fakeStore();
+    const snowflake = fakeSnowflake(() => CARD);
+    const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+    queue.enqueue = () => Promise.reject(new Error('deadline exceeded'));
+    const generator = createGenerator({ store, snowflake, config: config(), queue });
+
+    await expect(generator.start(SLUG)).rejects.toThrow('deadline exceeded');
+    expect(store.states.get('atlas/pipeline')).toMatchObject({ status: 'generating' });
+    expect(store.quotaUsed).toBe(1);
+  });
+
+  it('lets one of two concurrent retries replace a failed marker', async () => {
+    const { generator, store, queue } = harness(() => CARD);
+    store.states.set('atlas/pipeline', {
+      status: 'failed',
+      repo: 'atlas/pipeline',
+      errorCode: 'pipeline_error',
+      failedAt: new Date().toISOString(),
+    });
+
+    const [a, b] = await Promise.all([generator.start(SLUG), generator.start(SLUG)]);
+
+    expect([a.accepted, b.accepted].filter(Boolean)).toHaveLength(1);
+    expect(queue.enqueued).toHaveLength(1);
+    expect(store.quotaUsed).toBe(1);
   });
 
   it('marks the repo generating before the task is enqueued', async () => {

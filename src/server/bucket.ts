@@ -25,7 +25,7 @@ export interface CardStore {
    * @returns False when another caller already holds the claim — the write is create-only,
    *   so two concurrent requests for one cold repo cannot both start a Cortex call.
    */
-  claimGenerating(owner: string, repo: string): Promise<boolean>;
+  claimGenerating(owner: string, repo: string, expected?: JobState): Promise<boolean>;
   /** Cache a failure, so a bad slug cannot be retried into a bill. */
   markFailed(owner: string, repo: string, errorCode: string, reasons?: string[]): Promise<void>;
   /** Drop the state marker. Used to release a claim that was never followed through. */
@@ -38,6 +38,8 @@ export interface CardStore {
    * @returns False when the cap is spent, and when the counter is too contended to claim.
    */
   claimDailyQuota(cap: number, today: string): Promise<boolean>;
+  /** Return a reserved slot when queue admission fails before generation starts. */
+  releaseDailyQuota(today: string): Promise<void>;
 }
 
 const prefix = (owner: string, repo: string): string => `cards/${owner}/${repo}`;
@@ -66,17 +68,28 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
 
   const readJson = async (path: string): Promise<{ value: unknown; generation: string } | null> => {
     const file = bucket.file(path);
-    try {
-      const [contents] = await file.download();
-      const [metadata] = await file.getMetadata();
-      return {
-        value: JSON.parse(contents.toString('utf8')),
-        generation: String(metadata.generation ?? '0'),
-      };
-    } catch (error) {
-      if (isNotFound(error)) return null;
-      throw error;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      let generation: string;
+      try {
+        const [metadata] = await file.getMetadata();
+        generation = String(metadata.generation ?? '0');
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+
+      try {
+        // Bind the body to the generation we just observed. Without this, an overwrite between
+        // metadata and download can pair one writer's body with another writer's generation.
+        const [contents] = await bucket.file(path, { generation }).download();
+        return { value: JSON.parse(contents.toString('utf8')), generation };
+      } catch (error) {
+        // Metadata existed, so a missing exact generation means another writer replaced it.
+        if (!isNotFound(error)) throw error;
+      }
     }
+
+    throw new Error(`could not read a stable snapshot of ${path}`);
   };
 
   return {
@@ -103,7 +116,11 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
       );
     },
 
-    async claimGenerating(owner, repo) {
+    async claimGenerating(owner, repo, expected) {
+      const path = `${prefix(owner, repo)}/state.json`;
+      const current = expected ? await readJson(path) : null;
+      if (expected && JSON.stringify(current?.value) !== JSON.stringify(expected)) return false;
+
       const state: JobState = {
         status: 'generating',
         repo: `${owner}/${repo}`,
@@ -113,10 +130,12 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
       try {
         // ifGenerationMatch: 0 means "only if this object does not exist". Two requests for
         // the same cold repo race here, and exactly one wins.
-        await bucket.file(`${prefix(owner, repo)}/state.json`).save(JSON.stringify(state), {
+        await bucket.file(path).save(JSON.stringify(state), {
           contentType: 'application/json',
           metadata: { cacheControl: 'no-store' },
-          preconditionOpts: { ifGenerationMatch: 0 },
+          preconditionOpts: {
+            ifGenerationMatch: expected ? (current?.generation ?? '0') : 0,
+          },
         });
         return true;
       } catch (error) {
@@ -190,7 +209,7 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
           await file.save(JSON.stringify({ count: count + 1 } satisfies QuotaFile), {
             contentType: 'application/json',
             metadata: { cacheControl: 'no-store' },
-            preconditionOpts: { ifGenerationMatch: Number(current?.generation ?? 0) },
+            preconditionOpts: { ifGenerationMatch: current?.generation ?? '0' },
           });
           return true;
         } catch (error) {
@@ -200,6 +219,30 @@ export function createCardStore(bucketName: string, storage = new Storage()): Ca
 
       // Five straight losses means saturation, which is what the cap exists to stop.
       return false;
+    },
+
+    async releaseDailyQuota(today) {
+      const path = `meta/quota/${today}.json`;
+      const file = bucket.file(path);
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const current = await readJson(path);
+        const count = (current?.value as QuotaFile | undefined)?.count ?? 0;
+        if (count === 0) return;
+
+        try {
+          await file.save(JSON.stringify({ count: count - 1 } satisfies QuotaFile), {
+            contentType: 'application/json',
+            metadata: { cacheControl: 'no-store' },
+            preconditionOpts: { ifGenerationMatch: current?.generation ?? '0' },
+          });
+          return;
+        } catch (error) {
+          if (!isPreconditionFailed(error)) throw error;
+        }
+      }
+
+      throw new Error(`could not release daily quota for ${today}`);
     },
   };
 }

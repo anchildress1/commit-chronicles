@@ -23,7 +23,7 @@ typing them inline.
 ```bash
 set -a; source .env; set +a
 snow connection add \
-  --connection-name commit-chronicles \
+  --connection-name chronicles \
   --account "$SNOWFLAKE_ACCOUNT" \
   --user anchildress1 \
   --password "$SNOWFLAKE_PAT" \
@@ -33,6 +33,8 @@ snow connection add \
   --default \
   --no-interactive
 ```
+
+The Make targets use this connection explicitly as `chronicles`.
 
 Written to `~/Library/Application Support/snowflake/config.toml` (macOS),
 outside the repo.

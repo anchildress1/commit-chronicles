@@ -27,9 +27,7 @@ TAG="$(git rev-parse --short HEAD)"
 echo "==> building ${IMAGE}:${TAG}"
 gcloud builds submit --tag "${IMAGE}:${TAG}" --project "${PROJECT}"
 
-# The worker URL is the service's own address, which does not exist until the first
-# deploy. Look it up if the service is already there; otherwise the first deploy runs
-# without a queue and the update below wires it in.
+# The worker URL is the service's own address, which does not exist until the first deploy.
 WORKER_URL="$(gcloud run services describe "${SERVICE}" \
   --project "${PROJECT}" --region "${REGION}" \
   --format 'value(status.url)' 2>/dev/null || true)"
@@ -57,15 +55,14 @@ WORKER_URL="$(gcloud run services describe "${SERVICE}" \
 echo "==> deploying ${SERVICE}"
 ENV_VARS="GOOGLE_CLOUD_PROJECT=${PROJECT},CARD_BUCKET=${CARD_BUCKET},DAILY_GENERATION_CAP=${DAILY_GENERATION_CAP},SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT:?set SNOWFLAKE_ACCOUNT},SNOWFLAKE_USER=${SNOWFLAKE_USER:?set SNOWFLAKE_USER}"
 
-# The queue is configured only once the service has a URL for the task to call back to.
-# Handing it a placeholder would boot the service in queue mode pointed at nothing: every
-# /api/generate would enqueue a task that could never be delivered, and the repo would sit
-# on `generating` until its TTL lapsed. With no queue the service runs the pipeline inline,
-# which is correct for the seconds between the first deploy and the update below.
+# A new service has no URL yet. Its bootstrap revision stays private until the queue is wired;
+# otherwise a request in that gap would start detached inline work after request CPU stops.
+AUTH_FLAG="--allow-unauthenticated"
 if [[ -n "${WORKER_URL}" ]]; then
   ENV_VARS="${ENV_VARS},TASKS_LOCATION=${REGION},TASKS_QUEUE=${TASKS_QUEUE},TASKS_INVOKER_SA=${TASKS_SA},WORKER_URL=${WORKER_URL},PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-${WORKER_URL}}"
 else
-  echo "    first deploy: no service URL yet, so the queue is wired in afterwards"
+  AUTH_FLAG="--no-allow-unauthenticated"
+  echo "    first deploy: keeping the bootstrap revision private until the queue is wired"
 fi
 
 gcloud run deploy "${SERVICE}" \
@@ -73,7 +70,7 @@ gcloud run deploy "${SERVICE}" \
   --region "${REGION}" \
   --image "${IMAGE}:${TAG}" \
   --platform managed \
-  --allow-unauthenticated \
+  "${AUTH_FLAG}" \
   --service-account "${RUN_SA}" \
   --cpu 1 \
   --memory 512Mi \
@@ -94,6 +91,11 @@ if [[ -z "${WORKER_URL}" ]]; then
   gcloud run services update "${SERVICE}" \
     --project "${PROJECT}" --region "${REGION}" \
     --update-env-vars "TASKS_LOCATION=${REGION},TASKS_QUEUE=${TASKS_QUEUE},TASKS_INVOKER_SA=${TASKS_SA},WORKER_URL=${SERVICE_URL},PUBLIC_ORIGIN=${PUBLIC_ORIGIN:-${SERVICE_URL}}"
+
+  echo "==> opening the queue-configured service"
+  gcloud run services add-iam-policy-binding "${SERVICE}" \
+    --project "${PROJECT}" --region "${REGION}" \
+    --member=allUsers --role=roles/run.invoker >/dev/null
 fi
 
 # Inactive revisions are free, but they are also clutter and they pin the images the

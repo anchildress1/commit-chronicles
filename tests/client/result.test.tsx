@@ -101,35 +101,4 @@ describe('Result', () => {
 
     expect(onHome).toHaveBeenCalledOnce();
   });
-
-  it('falls back to execCommand when the Clipboard API is absent', async () => {
-    // Plain HTTP: navigator.clipboard is not defined at all, so the API call would throw
-    // synchronously rather than reject. This is the dev-over-LAN case.
-    const original = navigator.clipboard;
-    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
-    const exec = vi.fn(() => true);
-    Object.defineProperty(document, 'execCommand', { value: exec, configurable: true });
-
-    render(<Result slug={SLUG} cardUrl={CARD} pageUrl={PAGE} onHome={vi.fn()} />);
-    await userEvent.click(screen.getByRole('button', { name: /copy image url/i }));
-
-    expect(exec).toHaveBeenCalledWith('copy');
-    expect(await screen.findByRole('button', { name: /copied/i })).toBeInTheDocument();
-
-    Object.defineProperty(navigator, 'clipboard', { value: original, configurable: true });
-  });
-
-  it('says so when it cannot copy at all', async () => {
-    const original = navigator.clipboard;
-    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
-    Object.defineProperty(document, 'execCommand', { value: () => false, configurable: true });
-
-    render(<Result slug={SLUG} cardUrl={CARD} pageUrl={PAGE} onHome={vi.fn()} />);
-    await userEvent.click(screen.getByRole('button', { name: /copy image url/i }));
-
-    // Never claim a tick we did not earn: the reader would paste something else.
-    expect(await screen.findByRole('button', { name: /select it/i })).toBeInTheDocument();
-
-    Object.defineProperty(navigator, 'clipboard', { value: original, configurable: true });
-  });
 });

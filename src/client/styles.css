@@ -119,14 +119,17 @@ body {
 .stage {
   max-width: 820px;
   margin: 0 auto;
-  padding: 10vh 40px 6vh;
+  padding: 4vh 40px 4vh;
   text-align: center;
 }
 
 .stage--result {
-  --card-width: min(1060px, 100%);
+  /* Cap the card by HEIGHT as well as width: 1200x630 means 52dvh of height needs ~99dvh
+     of width, so without this the card alone can outgrow a short viewport and push the
+     actions off the bottom. */
+  --card-width: min(1060px, 100%, 88dvh);
   max-width: 1140px;
-  padding: 3vh 40px 5vh;
+  padding: 1.5vh 40px 2vh;
   text-align: center;
 }
 
@@ -656,7 +659,7 @@ body {
   }
 
   .footer {
-    padding: 12px 24px;
+    padding: 8px 24px;
     gap: 8px 16px;
   }
 

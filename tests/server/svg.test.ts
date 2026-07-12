@@ -89,11 +89,12 @@ describe('renderCard', () => {
         /<text x="[\d.]+" y="([\d.]+)"[^>]*font-family="'Space Mono[^>]*>(?:last commit|still rewriting)/g,
       ),
     ].map((match) => Number(match[1]));
-    const dotYs = [...svg.matchAll(/<circle cx="[\d.]+" cy="([\d.]+)" r="4/g)].map((match) =>
-      Number(match[1]),
-    );
+    // dots() is plot-only. The product mark in the header is circles too, and counting it
+    // here would measure the rail against the logo instead of the scatter.
+    const dotYs = dots(svg).map((dot) => dot.y);
 
     expect(railY.length).toBeGreaterThan(0);
+    expect(dotYs.length).toBeGreaterThan(0);
     expect(Math.max(...railY)).toBeLessThan(Math.min(...dotYs));
   });
 

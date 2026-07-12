@@ -17,25 +17,25 @@ flowchart TD
     accTitle: Delivery architecture
     accDescr: Cloud Run guards and enqueues. Cloud Tasks calls back into a Cloud Run worker over OIDC. The worker calls one Snowflake procedure that ingests from GitHub, scores storylines in SQL, and narrates the winner with Cortex. Cloud Run renders the SVG into a public bucket, which serves the card to READMEs.
 
-    SPA["Cloud Run<br/><small>static SPA + API, no analysis</small>"]
+    SPA["Cloud Run<br/>static SPA and API, no analysis"]
     Q["Cloud Tasks"]
-    W["Cloud Run worker<br/><small>/internal/generate, OIDC</small>"]
+    W["Cloud Run worker<br/>/internal/generate, OIDC"]
 
     subgraph SF["Snowflake"]
         direction TB
-        I["<b>ingest proc</b><br/><small>external access → api.github.com → COMMITS</small>"]
-        D["<b>detector</b><br/><small>gaps, streaks, hours → pick ONE thread</small>"]
-        C["<b>Cortex</b><br/><small>narrates it + picks the palette</small>"]
+        I["ingest proc<br/>external access to api.github.com"]
+        D["detector<br/>gaps, streaks, hours, pick ONE"]
+        C["Cortex<br/>narrates it, picks the palette"]
         I --> D --> C
     end
 
-    R["Cloud Run<br/><small>renders the SVG</small>"]
+    R["Cloud Run<br/>renders the SVG"]
     B[("public GCS bucket")]
-    OUT["README img · dev.to embed"]
+    OUT["README img, dev.to embed"]
 
-    SPA -->|"POST /api/generate<br/>guard · claim · enqueue"| Q
+    SPA -->|"POST /api/generate"| Q
     Q -->|"OIDC POST"| W --> SF
-    SF -->|"card payload (JSON)"| R --> B --> OUT
+    SF -->|"card payload"| R --> B --> OUT
     B -.->|"/api/state polls"| SPA
 ```
 

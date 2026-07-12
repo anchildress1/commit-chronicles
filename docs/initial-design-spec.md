@@ -75,12 +75,12 @@ stateDiagram-v2
     accDescr: A repo starts unknown. Claiming a quota slot and a generating marker moves it to generating. Success writes the card and makes it ready. Failure writes a failed marker, which is terminal for bad-repo errors and retryable for pipeline and Cortex errors. A generating marker older than its TTL is presumed dead and re-admitted.
 
     [*] --> unknown: no objects in the bucket
-    unknown --> generating: quota claimed +<br/>create-only marker written
-    generating --> ready: card.svg then card.json written,<br/>state.json cleared
+    unknown --> generating: quota claimed, create-only marker written
+    generating --> ready: card.svg then card.json written, state cleared
     generating --> failed: state.json records the error code
-    generating --> generating: marker older than<br/>GENERATING_TTL_SECONDS<br/>presumed dead, re-admitted
+    generating --> generating: marker past its TTL, presumed dead, re-admitted
     failed --> generating: retryable code only
-    failed --> [*]: terminal code —<br/>cached so it cannot be<br/>retried into a bill
+    failed --> [*]: terminal code, cached so it cannot be retried into a bill
     ready --> [*]: served from the bucket forever
 ```
 
@@ -121,26 +121,26 @@ flowchart TD
     accTitle: Commit Chronicles architecture
     accDescr: Cloud Run guards the generate request, claims quota, and enqueues to Cloud Tasks. Cloud Tasks calls back into Cloud Run with an OIDC token. That worker calls one Snowflake procedure, which ingests from GitHub through an external access integration, detects a storyline in SQL, and narrates it with Cortex. Cloud Run renders the returned payload to SVG and writes it to a public GCS bucket, which serves the card directly to READMEs.
 
-    SPA["SPA<br/><small>no analysis logic</small>"]
-    API["Cloud Run<br/><b>POST /api/generate</b><br/><small>guards · quota · claim · enqueue</small>"]
-    Q["Cloud Tasks<br/><small>commit-chronicles-gen<br/>max-concurrent-dispatches 2</small>"]
-    W["Cloud Run worker<br/><b>POST /internal/generate</b><br/><small>OIDC-verified</small>"]
+    SPA["SPA<br/>no analysis logic"]
+    API["Cloud Run<br/>POST /api/generate<br/>guards, quota, claim, enqueue"]
+    Q["Cloud Tasks<br/>max 2 concurrent dispatches"]
+    W["Cloud Run worker<br/>POST /internal/generate<br/>OIDC-verified"]
 
-    subgraph SF["Snowflake — CALL READ_REPO(owner, repo)"]
+    subgraph SF["Snowflake — CALL READ_REPO"]
         direction TB
-        ING["<b>ingest</b><br/><small>external access integration</small>"]
-        DET["<b>detector</b><br/><small>plain SQL → score → pick ONE</small>"]
-        CTX["<b>Cortex</b><br/><small>narrate that thread + choose the palette</small>"]
+        ING["ingest<br/>external access integration"]
+        DET["detector<br/>plain SQL, pick ONE"]
+        CTX["Cortex<br/>narrate it, choose the palette"]
         ING --> DET --> CTX
     end
 
     GH[("api.github.com")]
-    REN["Cloud Run<br/><small>templates the SVG</small>"]
-    GCS[("Public GCS bucket<br/><small>cache of record; the card's<br/>existence is the ready state</small>")]
+    REN["Cloud Run<br/>templates the SVG"]
+    GCS[("Public GCS bucket<br/>the card's existence<br/>is the ready state")]
 
     SPA --> API --> Q --> W --> SF
     ING <-.-> GH
-    SF -->|"card payload (JSON)"| REN
+    SF -->|"card payload"| REN
     REN -->|"only writer"| GCS
     GCS -->|"GET /api/state"| SPA
 ```

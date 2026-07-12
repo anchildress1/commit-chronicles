@@ -90,33 +90,33 @@ flowchart TD
     accTitle: Commit Chronicles architecture
     accDescr: The SPA posts to Cloud Run, which enqueues a Cloud Tasks job. The worker calls one Snowflake procedure that ingests from GitHub, detects a storyline in SQL, and narrates it with Cortex. Cloud Run renders the SVG into a public GCS bucket, which serves the card directly.
 
-    SPA["SPA<br/><small>React, path-driven</small>"]
-    API["Cloud Run<br/>POST /api/generate<br/><small>guard · claim · enqueue</small>"]
-    Q["Cloud Tasks<br/><small>max 2 concurrent</small>"]
-    W["Cloud Run worker<br/>POST /internal/generate<br/><small>OIDC verified</small>"]
+    SPA["SPA"]
+    API["Cloud Run<br/>POST /api/generate"]
+    Q["Cloud Tasks<br/>max 2 concurrent"]
+    W["Cloud Run worker<br/>POST /internal/generate"]
 
-    subgraph SF["Snowflake — CALL READ_REPO(owner, repo)"]
+    subgraph SF["Snowflake — CALL READ_REPO"]
         direction TB
-        ING["<b>ingest</b><br/>external access → api.github.com"]
-        DET["<b>detector</b><br/>plain SQL → score → pick ONE"]
-        CTX["<b>Cortex</b><br/>narrate the winner + pick the accent"]
+        ING["ingest<br/>external access"]
+        DET["detector<br/>plain SQL, pick ONE"]
+        CTX["Cortex<br/>narrate + pick the accent"]
         ING --> DET --> CTX
     end
 
     GH[("api.github.com")]
-    REN["Cloud Run<br/><small>renders the SVG</small>"]
-    GCS[("Public GCS bucket<br/><small>the cache of record</small>")]
-    README["README embed<br/>· social preview"]
+    REN["Cloud Run<br/>renders the SVG"]
+    GCS[("Public GCS bucket<br/>the cache of record")]
+    OUT["README embed"]
 
     SPA -->|"repo slug"| API
-    API --> Q
+    API -->|"guard, claim, enqueue"| Q
     Q -->|"survives the tab closing"| W
     W --> SF
     ING <-.->|"the warehouse gets its own data"| GH
-    SF -->|"card payload (JSON)"| REN
+    SF -->|"card payload"| REN
     REN -->|"only writer"| GCS
-    GCS --> README
-    GCS -->|"GET /api/state polls readiness"| SPA
+    GCS --> OUT
+    GCS -->|"GET /api/state"| SPA
 ```
 
 **The card's existence in the bucket _is_ the ready state.** There is no Firestore, no status column, no separate database. `readState` checks for `card.json`; if it's there, the repo is ready.
@@ -134,26 +134,26 @@ sequenceDiagram
     participant Q as Cloud Tasks
     participant S as Snowflake
 
-    U->>R: GET /api/state/{owner}/{repo}
+    U->>R: GET /api/state
     R->>B: does card.json exist?
     B-->>R: no
     R-->>U: unknown
 
     U->>R: POST /api/generate
-    R->>B: claim daily quota (cap)
-    R->>B: claim generating (create-only)
+    R->>B: claim daily quota
+    R->>B: claim generating, create-only
     Note over R,B: two racing requests cannot<br/>both start a Cortex call
-    R->>Q: enqueue (OIDC)
+    R->>Q: enqueue, OIDC-signed
     R-->>U: 202 generating
 
     Q->>R: POST /internal/generate
-    R->>S: CALL READ_REPO(owner, repo)
-    S->>S: ingest if cold → detect → Cortex
+    R->>S: CALL READ_REPO
+    S->>S: ingest if cold, detect, narrate
     S-->>R: card payload
 
     R->>R: render SVG
-    R->>B: write card.svg → card.json → clear state
-    Note over R,B: card.json last:<br/>a crash leaves it retryable,<br/>never ready-with-no-card
+    R->>B: card.svg, then card.json, then clear state
+    Note over R,B: card.json last: a crash leaves it<br/>retryable, never ready-with-no-card
 
     loop every 2.5s
         U->>R: GET /api/state
@@ -191,26 +191,26 @@ flowchart LR
     accTitle: The SQL detector
     accDescr: COMMITS_CLEAN feeds six storyline views, each gated on a minimum commit count. Their scores union into STORYLINE_SCORES, and REPO_STORYLINE picks the single highest score, breaking ties by drama rank. CARD_EVIDENCE then selects only the winning thread's commit lines for Cortex.
 
-    C["COMMITS_CLEAN<br/><small>merges + bots dropped</small>"]
+    C["COMMITS_CLEAN<br/>merges and bots dropped"]
 
-    subgraph SC["STORY_* views — scored, gated, free"]
+    subgraph SC["STORY views — scored, gated, free"]
         direction TB
-        R["relapse<br/><small>gap ≥ 30d</small>"]
-        N["nocturne<br/><small>≥ 50% commits 22:00–04:59</small>"]
-        B["binge<br/><small>streak ≥ 7d</small>"]
-        X["collapse<br/><small>silent ≥ 90d after a spike</small>"]
-        F["fight<br/><small>≥ 4 reverts in 7d</small>"]
-        S["resurrection<br/><small>relapse + a release</small>"]
+        R["relapse<br/>gap 30d or more"]
+        N["nocturne<br/>half the commits at night"]
+        B["binge<br/>streak of 7d or more"]
+        X["collapse<br/>a spike, then 90d silent"]
+        F["fight<br/>4 reverts inside 7d"]
+        S["resurrection<br/>a relapse that shipped"]
     end
 
-    W["REPO_STORYLINE<br/><small>ORDER BY score DESC, drama_rank</small>"]
-    E["CARD_EVIDENCE<br/><small>the winner's lines only</small>"]
-    AI["CHRONICLE_CARD<br/><small>the one Cortex call</small>"]
-    NONE["'none'<br/><small>grey template card<br/>Cortex never runs</small>"]
+    W["REPO_STORYLINE<br/>highest score, ties by drama"]
+    E["CARD_EVIDENCE<br/>the winner's lines only"]
+    AI["CHRONICLE_CARD<br/>the one Cortex call"]
+    NONE["none<br/>grey template card<br/>Cortex never runs"]
 
     C --> SC --> W
     W -->|"a winner"| E --> AI
-    W -->|"no storyline clears its floor"| NONE
+    W -->|"nothing clears its floor"| NONE
 ```
 
 Every storyline gates on `MIN_COMMITS = 15` so bot noise can't win, and scoring is deterministic — the same repo always yields the same story. Thresholds live in one `DETECTOR_CONFIG` view:

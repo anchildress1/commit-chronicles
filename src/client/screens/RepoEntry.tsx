@@ -35,23 +35,29 @@ export function RepoEntry({
   return (
     <form onSubmit={submit} noValidate>
       <div className="entry__field">
-        <span className="entry__prefix" aria-hidden="true">
-          github.com/
-        </span>
-        <input
-          className="entry__input"
-          value={value}
-          onChange={(event) => {
-            setValue(event.target.value);
-            setError(null);
-          }}
-          placeholder="owner/repo"
-          aria-label="GitHub repository, as owner/repo"
-          aria-invalid={error !== null}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-        />
+        {/* The field reads as one control, so the `github.com/` prefix and the space around it
+            have to behave like one. A label does that natively — no click handler, no keyboard
+            special case. It wraps only the input, because a label may not contain a second
+            labelable element and the submit button is one. */}
+        <label className="entry__lead">
+          <span className="entry__prefix" aria-hidden="true">
+            github.com/
+          </span>
+          <input
+            className="entry__input"
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setError(null);
+            }}
+            placeholder="owner/repo"
+            aria-label="GitHub repository, as owner/repo"
+            aria-invalid={error !== null}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+        </label>
         <button type="submit" className="btn-primary" disabled={value.trim().length === 0}>
           {submitLabel}
         </button>

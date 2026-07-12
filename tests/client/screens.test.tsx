@@ -102,4 +102,26 @@ describe('Nav', () => {
     await userEvent.click(screen.getByRole('button', { name: /Commit Chronicles/ }));
     expect(onHome).toHaveBeenCalledOnce();
   });
+
+  it('focuses the input when the field is clicked anywhere but the button', async () => {
+    render(<Landing onSubmit={vi.fn()} />);
+
+    const input = screen.getByRole('textbox', { name: /GitHub repository/i });
+    expect(input).not.toHaveFocus();
+
+    // The prefix is decorative, but it looks like part of the field, so it has to act like it.
+    await userEvent.click(screen.getByText('github.com/'));
+    expect(input).toHaveFocus();
+  });
+
+  it('does not steal the click that submits', async () => {
+    const onSubmit = vi.fn();
+    render(<Landing onSubmit={onSubmit} />);
+
+    const input = screen.getByRole('textbox', { name: /GitHub repository/i });
+    await userEvent.type(input, 'owner/repo');
+    await userEvent.click(screen.getByRole('button', { name: /read/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ slug: 'owner/repo' }));
+  });
 });

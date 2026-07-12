@@ -7,14 +7,11 @@ interface LandingProps {
 }
 
 /** Pre-generated, so a judge clicking one never waits on a cold Cortex call. */
-// Three passion projects, three different storylines: a binge, a nocturne, a relapse. The
-// detector reads a personal arc, so a repo with a team behind it has nothing for it to find —
-// forem and linux both came back "no story here", which is true and a terrible advertisement.
-export const EXAMPLES = [
-  'anchildress1/save-the-sun',
-  'anchildress1/carbon-trace',
-  'anchildress1/legacy-smelter',
-];
+// Two passion projects carrying a storyline apiece, then forem, which carries none. The
+// detector reads a personal arc, so a team repo with continuous CI has nothing for it to
+// find. Showing that is the point: the product says "no story here" rather than inventing
+// one, and a judge should be able to click on it.
+export const EXAMPLES = ['anchildress1/save-the-sun', 'anchildress1/carbon-trace', 'forem/forem'];
 
 export function Landing({ onSubmit }: Readonly<LandingProps>): JSX.Element {
   return (

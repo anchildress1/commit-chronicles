@@ -62,7 +62,7 @@ describe('fetchState', () => {
 });
 
 describe('embedMarkdown', () => {
-  const CARD = 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg';
+  const CARD = 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.png';
   const PAGE = 'https://commitchronicles.dev/atlas/pipeline';
 
   it('points the image at the bucket and the link at the page', () => {

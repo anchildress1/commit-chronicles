@@ -271,7 +271,7 @@ describe('serving the card', () => {
     await generate(app, 'atlas/pipeline');
     await queue.deliver();
 
-    expect((await app.request('/atlas/pipeline/card.svg')).status).toBe(404);
+    expect((await app.request('/atlas/pipeline/card.png')).status).toBe(404);
   });
 
   it('hands the reader the bucket URL once the card exists', async () => {
@@ -284,7 +284,7 @@ describe('serving the card', () => {
     };
 
     expect(state.cardUrl).toMatch(
-      /^https:\/\/storage\.googleapis\.com\/.+\/cards\/atlas\/pipeline\/card\.svg$/,
+      /^https:\/\/storage\.googleapis\.com\/.+\/cards\/atlas\/pipeline\/card\.png$/,
     );
   });
 

@@ -141,21 +141,20 @@ function attributionWidth(): number {
  * The card says who read it once, in words. This says it again in a mark, which is what a
  * reader remembers and what survives being shrunk into a README.
  */
-function crystal(cx: number, cy: number, accent: string): string {
-  const r = 5;
+function crystal(cx: number, cy: number, accent: string, r = 5): string {
   const spokes = [0, 60, 120]
     .map((deg) => {
       const rad = (deg * Math.PI) / 180;
       const dx = round(Math.cos(rad) * r);
       const dy = round(Math.sin(rad) * r);
-      return `<line x1="${cx - dx}" y1="${cy - dy}" x2="${cx + dx}" y2="${cy + dy}" stroke="${accent}" stroke-width="1.2" stroke-linecap="round"/>`;
+      return `<line x1="${round(cx - dx)}" y1="${round(cy - dy)}" x2="${round(cx + dx)}" y2="${round(cy + dy)}" stroke="${accent}" stroke-width="${round(r * 0.24)}" stroke-linecap="round"/>`;
     })
     .join('');
 
   return [
-    `<circle cx="${cx}" cy="${cy}" r="9" fill="url(#glowMark)"/>`,
+    `<circle cx="${cx}" cy="${cy}" r="${round(r * 1.8)}" fill="url(#glowMark)"/>`,
     spokes,
-    `<circle cx="${cx}" cy="${cy}" r="1.7" fill="${accent}"/>`,
+    `<circle cx="${cx}" cy="${cy}" r="${round(r * 0.34)}" fill="${accent}"/>`,
   ].join('');
 }
 
@@ -198,8 +197,7 @@ export function renderCard(payload: CardPayload): string {
 
   // Header: product mark, then the observed meta. No opinion in this row.
   parts.push(
-    `<circle cx="73" cy="70" r="12" fill="none" stroke="${accent}" stroke-width="1.5"/>`,
-    `<circle cx="73" cy="70" r="3.5" fill="${accent}"/>`,
+    crystal(74, 70, accent, 9),
     text('Commit Chronicles', {
       x: 96,
       y: 78,

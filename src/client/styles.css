@@ -527,3 +527,155 @@ body {
     transform: none !important;
   }
 }
+
+/* Shell: the footer sits at the bottom of the viewport on a short page, and below the
+   content on a long one. `flex: 1` on the screen is what pins it — not `position: fixed`,
+   which would cover the card on a phone. */
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.shell > .stage,
+.shell > main {
+  flex: 1;
+}
+
+/* Footer */
+.footer {
+  margin-top: auto;
+  padding: 28px 40px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.footer__legal {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.footer__powered,
+.footer__legal-link,
+.footer__social {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.footer__powered {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.footer__legal-link {
+  display: inline;
+  font-size: 12px;
+  color: var(--faint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.footer__socials {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer__social {
+  /* 40px hit target: an 18px icon alone is below the 24px AA minimum. */
+  width: 40px;
+  height: 40px;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--dim);
+}
+
+.footer__powered:hover,
+.footer__legal-link:hover,
+.footer__social:hover {
+  color: var(--accent);
+}
+
+/* Never remove the focus ring — keyboard users need to see where they are. */
+.footer__powered:focus-visible,
+.footer__legal-link:focus-visible,
+.footer__social:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: var(--accent);
+  border-radius: 6px;
+}
+
+.footer__icon {
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .footer__powered,
+  .footer__legal-link,
+  .footer__social {
+    transition: none;
+  }
+}
+
+/* Embedded view: dev.to and README embeds render this in a short iframe, where the hero
+   eats the viewport and the input falls below the fold. Scale the type down and tighten the
+   padding so the thing the page exists for — the input — is visible without scrolling. */
+@media (max-height: 720px) {
+  .nav {
+    padding: 12px 24px;
+  }
+
+  .stage {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .display {
+    font-size: clamp(28px, 5.2vh + 1rem, 56px);
+    line-height: 1.05;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+  }
+
+  .lede {
+    font-size: 14px;
+    max-width: 52ch;
+  }
+
+  .footer {
+    padding: 12px 24px;
+    gap: 8px 16px;
+  }
+
+  .footer__social {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+@media (max-height: 560px) {
+  .lede {
+    display: none;
+  }
+
+  .display {
+    font-size: clamp(24px, 4.4vh + 0.75rem, 40px);
+  }
+}

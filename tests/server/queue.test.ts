@@ -34,6 +34,18 @@ interface TaskRequest {
   };
 }
 
+/** Records the backoff instead of serving it, so the suite does not sleep through it. */
+function clock() {
+  const delays: number[] = [];
+  return {
+    delays,
+    sleep: (ms: number) => {
+      delays.push(ms);
+      return Promise.resolve();
+    },
+  };
+}
+
 function client(outcomes: (Error | undefined)[] = []) {
   const created: TaskRequest[] = [];
   let attempt = 0;
@@ -53,7 +65,7 @@ function client(outcomes: (Error | undefined)[] = []) {
 describe('createCloudTasksQueue', () => {
   it('creates a named OIDC task with the complete worker request', async () => {
     const fake = client();
-    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id');
+    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', clock().sleep);
 
     await queue.enqueue(parseSlug('atlas/pipeline'));
 
@@ -80,7 +92,7 @@ describe('createCloudTasksQueue', () => {
 
   it('retries an ambiguous create with the same task name', async () => {
     const fake = client([new RpcError(4), undefined]);
-    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id');
+    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', clock().sleep);
 
     await expect(queue.enqueue(parseSlug('atlas/pipeline'))).resolves.toBeUndefined();
     expect(fake.created.map((request) => request.task.name)).toEqual([
@@ -94,13 +106,55 @@ describe('createCloudTasksQueue', () => {
       CONFIG,
       client([new RpcError(4), new RpcError(6)]) as never,
       () => 'job-id',
+      clock().sleep,
     );
 
     await expect(queue.enqueue(parseSlug('atlas/pipeline'))).resolves.toBeUndefined();
   });
 
+  it('reads an HTTP 409 as the same proof, because the client can speak REST', async () => {
+    // The gRPC code for "it is already there" is 6; over REST the very same answer arrives as
+    // 409. Reading only one alphabet strands the repo on a task that exists.
+    const queue = createCloudTasksQueue(
+      CONFIG,
+      client([new RpcError(409)]) as never,
+      () => 'job-id',
+      clock().sleep,
+    );
+
+    await expect(queue.enqueue(parseSlug('atlas/pipeline'))).resolves.toBeUndefined();
+  });
+
+  it('reads an HTTP refusal as definitive, so admission is rolled back', async () => {
+    const queue = createCloudTasksQueue(
+      CONFIG,
+      client([new RpcError(403)]) as never,
+      () => 'job-id',
+      clock().sleep,
+    );
+
+    await expect(queue.enqueue(parseSlug('atlas/pipeline'))).rejects.toBeInstanceOf(
+      TaskNotCreatedError,
+    );
+  });
+
+  it('backs off between attempts rather than failing three times in one microsecond', async () => {
+    const ticks = clock();
+    const fake = client([new RpcError(14), new RpcError(14), undefined]);
+    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', ticks.sleep);
+
+    await queue.enqueue(parseSlug('atlas/pipeline'));
+
+    expect(ticks.delays).toEqual([250, 500]);
+  });
+
   it('reports a definitive create refusal so admission can be rolled back', async () => {
-    const queue = createCloudTasksQueue(CONFIG, client([new RpcError(5)]) as never, () => 'job-id');
+    const queue = createCloudTasksQueue(
+      CONFIG,
+      client([new RpcError(5)]) as never,
+      () => 'job-id',
+      clock().sleep,
+    );
 
     await expect(queue.enqueue(parseSlug('atlas/pipeline'))).rejects.toBeInstanceOf(
       TaskNotCreatedError,
@@ -109,7 +163,7 @@ describe('createCloudTasksQueue', () => {
 
   it('surfaces an ambiguous failure after three idempotent attempts', async () => {
     const fake = client([new RpcError(14), new RpcError(14), new RpcError(14)]);
-    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id');
+    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', clock().sleep);
 
     await expect(queue.enqueue(parseSlug('atlas/pipeline'))).rejects.toThrow('rpc 14');
     expect(fake.created).toHaveLength(3);

@@ -214,6 +214,22 @@ describe('start', () => {
     expect(snowflake.calls).toEqual(['atlas/pipeline']);
   });
 
+  it('reports the enqueue failure even when the rollback itself fails', async () => {
+    // The rollback is an apology for the enqueue. If the apology throws, the caller must still
+    // be told what actually went wrong, or the 500 blames the wrong thing entirely.
+    const store = fakeStore();
+    const snowflake = fakeSnowflake(() => CARD);
+    const queue = fakeQueue((slug) => runGeneration({ store, snowflake }, slug));
+    queue.enqueue = () => Promise.reject(new TaskNotCreatedError(new Error('queue is down')));
+    store.releaseDailyQuota = () => Promise.reject(new Error('bucket is on fire'));
+
+    const generator = createGenerator({ store, snowflake, config: config(), queue });
+
+    await expect(generator.start(SLUG)).rejects.toThrow('cloud task was not created');
+    // The half of the rollback that could run, ran.
+    expect(store.states.get('atlas/pipeline')).toBeUndefined();
+  });
+
   it('releases the claim when the queue refuses the task', async () => {
     // Nothing will pick it up, so leaving the marker would strand the repo until the TTL.
     const store = fakeStore();

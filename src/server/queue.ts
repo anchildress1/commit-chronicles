@@ -19,8 +19,23 @@ export class TaskNotCreatedError extends Error {
   }
 }
 
-const DEFINITELY_NOT_CREATED = new Set([3, 5, 7, 9, 16]);
+/**
+ * What an error says about whether the task exists.
+ *
+ * Both alphabets have to be read. The client speaks gRPC by default, but it falls back to
+ * REST — and there the same refusals arrive as HTTP status codes. Reading only gRPC would see
+ * a 409 (the task is already there) as merely ambiguous and strand the repo on `generating`.
+ */
+const CREATED = new Set([6, 409]);
+const NOT_CREATED = new Set([3, 5, 7, 9, 16, 400, 401, 403, 404, 412]);
 const CREATE_ATTEMPTS = 3;
+const BACKOFF_MS = 250;
+
+/** Retrying a transient refusal in the same microsecond just fails three times instead of one. */
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 /** Verifies that a worker request really came from our queue, not from the open internet. */
 export interface TaskAuthenticator {
@@ -36,6 +51,7 @@ export function createCloudTasksQueue(
   config: Config,
   client = new CloudTasksClient(),
   taskId: () => string = randomUUID,
+  sleep: (ms: number) => Promise<void> = wait,
 ): TaskQueue {
   const tasks = config.tasks;
   if (!tasks) {
@@ -71,13 +87,15 @@ export function createCloudTasksQueue(
           return;
         } catch (error) {
           const status = statusOf(error);
-          if (status === 6) return;
-          if (status !== undefined && DEFINITELY_NOT_CREATED.has(status)) {
+          if (status !== undefined && CREATED.has(status)) return;
+          if (status !== undefined && NOT_CREATED.has(status)) {
             throw new TaskNotCreatedError(error);
           }
           if (attempt === CREATE_ATTEMPTS - 1) throw error;
+
           // The task name makes retries idempotent: a committed first attempt answers
           // ALREADY_EXISTS instead of creating duplicate paid work.
+          await sleep(BACKOFF_MS * 2 ** attempt);
         }
       }
     },

@@ -151,13 +151,24 @@ export function createGenerator(deps: GeneratorDeps): Generator {
       try {
         await queue.enqueue(slug);
       } catch (error) {
+        // An ambiguous failure may have created the task after all, so the claim stands and
+        // the TTL reaps it. Rolling back here would risk a second, paid, concurrent run.
         if (!(error instanceof TaskNotCreatedError)) throw error;
-        // Nothing will ever pick this up, so release the claim instead of stranding the
-        // repo on `generating` until the TTL lapses.
-        await Promise.all([
+
+        // Nothing will ever pick this up, so release the claim instead of stranding the repo
+        // on `generating` until the TTL lapses. A rollback that fails is logged and stepped
+        // over: what the caller has to be told is that the enqueue failed, not that the
+        // apology for it also failed.
+        const rollback = await Promise.allSettled([
           store.clearState(slug.owner, slug.repo),
           store.releaseDailyQuota(quotaDate),
         ]);
+        for (const outcome of rollback) {
+          if (outcome.status === 'rejected') {
+            log('rollback failed', { repo: slug.slug, cause: String(outcome.reason) });
+          }
+        }
+
         throw error;
       }
 

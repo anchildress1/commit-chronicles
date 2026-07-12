@@ -20,6 +20,9 @@ export default defineConfig({
         'src/server/index.ts',
         'src/server/rerender.ts',
         'src/client/main.tsx',
+        // The shell: picks a screen and threads the accent through. The logic it stands on
+        // — parseSlug, useJob, and the screens themselves — is tested directly.
+        'src/client/App.tsx',
         // SDK adapters: the logic under test would be the vendor's.
         'src/server/snowflake.ts',
         'src/server/queue.ts',

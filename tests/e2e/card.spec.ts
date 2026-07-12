@@ -31,10 +31,10 @@ async function stubApi(
     });
   });
 
-  await page.route('**/card.svg', async (route) => {
+  await page.route('**/card.png', async (route) => {
     await route.fulfill({
       status: 200,
-      contentType: 'image/svg+xml',
+      contentType: 'image/png',
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"></svg>',
     });
   });
@@ -75,7 +75,7 @@ test('a ready repo shows the card and the README embed', async ({ page }) => {
     'atlas/pipeline': {
       status: 'ready',
       repo: 'atlas/pipeline',
-      cardUrl: 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg',
+      cardUrl: 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.png',
       pageUrl: 'https://commitchronicles.dev/atlas/pipeline',
     },
   });
@@ -89,7 +89,7 @@ test('a ready repo shows the card and the README embed', async ({ page }) => {
   // not cost a Cloud Run request.
   await expect(card).toHaveAttribute('src', /^https:\/\/storage\.googleapis\.com\//);
   await expect(page.getByText('[![Commit Chronicles]', { exact: false })).toContainText(
-    'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg',
+    'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.png',
   );
 });
 
@@ -119,7 +119,7 @@ test('the shell takes the card’s accent once the card exists', async ({ page }
       status: 'ready',
       repo: 'atlas/pipeline',
       accent: '#d3e85a',
-      cardUrl: 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.svg',
+      cardUrl: 'https://storage.googleapis.com/cc-cards/cards/atlas/pipeline/card.png',
       pageUrl: 'https://commitchronicles.dev/atlas/pipeline',
     },
   });

@@ -5,10 +5,28 @@
 # The project resources this expects (bucket, Artifact Registry repo, service accounts,
 # Secret Manager entry, Cloud Tasks queue) are created once by `make gcp-bootstrap`.
 #
-# Secrets never appear here. SNOWFLAKE_PAT is mounted from Secret Manager at run time;
-# .env is for local development only and is not read by this script.
+# Config comes from .env; SNOWFLAKE_PAT comes from Secret Manager and is mounted at run
+# time. No secret value is ever passed on a gcloud command line, where it would land in
+# shell history and the audit log.
 
 set -euo pipefail
+
+# Read here rather than in the caller, so the script behaves the same run bare or run by
+# make. Named keys only — sourcing .env would pull SNOWFLAKE_PAT and GITHUB_TOKEN into the
+# environment of a process that shells out to gcloud, which is exactly what Secret Manager
+# exists to prevent. An already-exported value wins, so CI can override with no file present.
+#
+# Every key here is optional at *this* layer: a missing one falls through to the defaults
+# below, or to the ${VAR:?} guards that make the genuinely-required ones fatal. Hence the
+# `|| true` — under `set -e`, a grep that matches nothing would otherwise kill the deploy.
+CONFIG_KEYS=(SNOWFLAKE_ACCOUNT SNOWFLAKE_USER CARD_BUCKET PUBLIC_ORIGIN DAILY_GENERATION_CAP)
+if [[ -f .env ]]; then
+  for key in "${CONFIG_KEYS[@]}"; do
+    [[ -n ${!key:-} ]] && continue
+    value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2- || true)"
+    [[ -n ${value} ]] && export "${key}=${value}"
+  done
+fi
 
 PROJECT="${PROJECT:-anchildress1}"
 REGION="${REGION:-us-east1}"

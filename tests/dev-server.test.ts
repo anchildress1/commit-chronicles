@@ -23,7 +23,7 @@ describe('dev server proxy', () => {
   it('does not proxy the card, because the bucket serves it directly', () => {
     // The card is fetched by its absolute bucket URL, so nothing about it is ever same-origin.
     // A rule here would only be dead weight — and a hint that Cloud Run is back in the path.
-    expect(matches('/atlas/pipeline/card.svg')).toBe(false);
+    expect(matches('/atlas/pipeline/card.png')).toBe(false);
   });
 
   it('does not swallow the client’s own /api.ts module', () => {

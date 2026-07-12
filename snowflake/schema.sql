@@ -82,9 +82,13 @@ ALTER TABLE CARDS ADD COLUMN IF NOT EXISTS PIPELINE_VERSION STRING;
 -- A card is only as current as the prompt and the evidence that produced it. Hashing the
 -- deployed DDL means the version moves on its own when either changes; a hand-maintained
 -- constant is a version someone forgets to bump.
+--
+-- GET_DDL resolves an exact overload, so this arity must track CHRONICLE_CARD's parameter
+-- list in ai_functions.sql. A stale count does not fail at CREATE VIEW — it fails inside
+-- READ_REPO, which reads this view on every write.
 CREATE OR REPLACE VIEW PIPELINE_VERSION AS
 SELECT LEFT(MD5(
-    GET_DDL('FUNCTION', 'CHRONICLE_CARD(VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR)')
+    GET_DDL('FUNCTION', 'CHRONICLE_CARD(VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR,VARCHAR)')
  || GET_DDL('VIEW', 'CARD_EVIDENCE')
 ), 12) AS VERSION;
 

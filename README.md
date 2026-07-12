@@ -32,7 +32,6 @@ Three real repos, three storylines the detector found unaided — a **binge**, a
 - [How to Contribute](#how-to-contribute)
 - [What's Next](#whats-next)
 - [License](#license)
-- [Acknowledgements](#acknowledgements)
 - [Author](#author)
 
 ---
@@ -161,7 +160,7 @@ sequenceDiagram
     R-->>U: ready + cardUrl
 ```
 
-**The queue is a cost decision, not plumbing.** Detaching work from the request that started it would need Cloud Run's `--no-cpu-throttling`, which bills instance time instead of request time — you pay for the container to sit there doing nothing. Cloud Tasks calls back _into_ the service, so the pipeline runs inside a request: CPU is billed only while it works, the service still scales to zero, and closing the tab has no effect on a job that is no longer attached to the tab's connection.
+**The queue is a cost decision.** Cloud Tasks calls back _into_ the service, so the pipeline runs inside a request — CPU is billed only while it works and the service still scales to zero. Detaching the work instead would need `--no-cpu-throttling`, which bills the container for sitting there doing nothing.
 
 ---
 
@@ -237,11 +236,9 @@ QUALIFY ROW_NUMBER() OVER (
 
 ### 3. Cortex narrates _only_ the winning thread
 
-`CHRONICLE_CARD` is a hand-written SQL UDF wrapping `AI_COMPLETE` — one schema-constrained call that returns the whole card's writing. Model `claude-sonnet-4-5`, **`temperature 0.4`**, `max_tokens 2048`.
+`CHRONICLE_CARD` is a hand-written SQL UDF wrapping `AI_COMPLETE` — one schema-constrained call. Model `claude-sonnet-4-5`, `temperature 0.4`, `max_tokens 2048`.
 
-The temperature is deliberate. At 0 the model writes the same flat, safe sentence about every repo — and a card nobody wants to share is a failed product. The facts are already pinned by the detector and re-verified in SQL afterwards, so the only thing warmth can move is the phrasing. Let it.
-
-It is fed `CARD_EVIDENCE`: the winning thread's commit lines, budgeted at **25% of the history, floored at 20 lines and capped at 140**. Never the whole repo — that's how you buy an expensive, unfocused paragraph. Squash-merge bodies are exploded into individual lines first, so work hidden inside a merge is still visible.
+It is fed `CARD_EVIDENCE`: the winning thread's commit lines, budgeted at **25% of the history, floored at 20 lines and capped at 140**. Never the whole repo. Squash-merge bodies are exploded into individual lines first, so work hidden inside a merge is still visible.
 
 The response schema constrains exactly nine keys:
 
@@ -267,7 +264,7 @@ The output is then _verified in SQL_ before it is stored. A bad accent hex, a di
 
 Detection costs nothing. The LLM sees ~20–140 lines, not twenty thousand. `CHRONICLES_WH` is an XSMALL that auto-suspends after 60 seconds with a 300-second statement timeout. Every Cortex query ID is stored on the card row for cost audit.
 
-> **Not built with Cortex AI Function Studio — deliberately.** The Studio registers functions through `SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION`, which Snowflake documents as internal and subject to change without notice; its supported entry points are a Snowsight wizard and the Cortex Code CLI, neither of which leaves the function in this repo. It emits an ordinary UDF around `AI_COMPLETE` anyway — so we wrote that ourselves, and you can read it.
+> **Not built with Cortex AI Function Studio — deliberately.** The Studio registers functions through `SNOWFLAKE.CORTEX.CREATE_AI_FUNCTION`, which Snowflake documents as internal and subject to change without notice, and its entry points are a Snowsight wizard and the Cortex Code CLI — neither leaves the function in this repo. It emits an ordinary UDF around `AI_COMPLETE` anyway, so we wrote that ourselves. You can read it.
 
 ---
 
@@ -378,15 +375,7 @@ make deploy             # build the image, deploy to Cloud Run, prune to 3 revis
 
 [PolyForm Shield 1.0.0](LICENSE).
 
-Read it, learn from it, fork it, run it yourself. What you can't do is turn around and sell it as a competing product — the license permits everything _except_ using it to compete with me. If you're a developer poking at the SQL, you're fine. If you're a company planning to relabel this as your own commit-storytelling product, you're not.
-
----
-
-## Acknowledgements
-
-- Built for the **DEV Weekend Challenge: Passion Edition**, targeting _Best Use of Snowflake_.
-- The commit histories on the demo cards are real, and mostly embarrassing.
-- GitHub's REST Commits API — used because the Activity Events API stopped carrying commit summaries on 7 Oct 2025, which also gutted every GH-Archive mirror of them.
+Read it, learn from it, fork it, run it yourself. The one thing you can't do is sell it as a competing product. Poking at the SQL is fine; relabelling this as your own commit-storytelling product is not.
 
 ---
 

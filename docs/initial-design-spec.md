@@ -180,17 +180,15 @@ flowchart TD
     GCS -->|"GET /api/state"| SPA
 ```
 
-**Generation goes through a queue, and that is a cost decision.** The work has to outlive the browser tab. Detaching it from the request that started it would need Cloud Run's `--no-cpu-throttling`, which bills instance time instead of request time — you pay for the container to sit there doing nothing. Cloud Tasks calls back into the service, so the pipeline runs _inside_ a request: CPU is billed only while it is working, the service still scales to zero, and closing the tab has no effect on a job that is no longer attached to the tab's connection. The queue's `max-concurrent-dispatches=2` is the real ceiling on the Cortex spend rate — at most two repos can be in the warehouse at once, whatever the front page is doing.
+Three decisions worth defending:
 
-`/internal/generate` is on a public service, so it verifies the task's OIDC token against the invoker service account before it spends anything. No token, no work.
+**The queue is a cost decision.** The work must outlive the browser tab. Detaching it from its originating request would need `--no-cpu-throttling`, which bills instance time instead of request time — you pay for the container to sit idle. Cloud Tasks calls back into the service, so the pipeline runs _inside_ a request: CPU is billed only while it works, and the service still scales to zero. `max-concurrent-dispatches=2` is the real ceiling on Cortex spend — at most two repos in the warehouse at once, whatever the front page is doing.
 
-- **Snowflake** reaches GitHub itself via an external access integration, finds the story in SQL, and narrates it with Cortex. The ingest layer is a stored procedure, not a service.
-- **Cloud Run** owns the routes, calls one Snowflake proc, and turns the returned payload into an SVG. It fetches no commit data and computes no analysis.
-- **The GCS bucket** is the cache of record and serves cards directly. Cloud Run serves the SPA and `/api/state`; a cached render never calls Snowflake or GitHub.
+**Rendering lives in Cloud Run, not Snowflake.** Templating an SVG proves nothing about a warehouse, and doing it in-warehouse would drag a `STORAGE INTEGRATION`, an external stage, and a Snowflake-minted IAM grant onto the critical path to buy nothing. The Snowflake case rests on the ingest, the detector, and the Cortex call.
 
-**Rendering lives in Cloud Run, not Snowflake.** Templating an SVG string is a chore, not a demonstration of a data warehouse — and doing it in-warehouse would drag a `STORAGE INTEGRATION`, an external stage, and a Snowflake-minted service-account IAM grant onto the critical path to buy nothing. The Snowflake case rests on the ingest, the detector, and the Cortex call. Cloud Run writes to the bucket with ordinary GCP credentials.
+**The bucket serves the card because Snowflake can't.** SPCS "public" endpoints are RBAC-gated and hand an anonymous browser a login page.
 
-Snowflake cannot serve an anonymous HTTP request — SPCS "public" endpoints are RBAC-gated and hand a browser a login page. The public GCS bucket serves the card; Cloud Run serves the page and API.
+`/internal/generate` is on a public service and spends Cortex credits, so it verifies the task's OIDC token against the invoker service account first. No token, no work.
 
 ### Routes
 
@@ -294,7 +292,7 @@ One call, fed **only the winning storyline's evidence**. Never the whole history
 
 Model: `claude-sonnet-4-5` via `AI_COMPLETE`, `temperature 0.4`, `max_tokens 2048`.
 
-**Temperature is 0.4 on purpose, and must not be dropped to 0.** Determinism belongs to the detector, and it has it — the same repo always yields the same storyline, the same evidence, and the same facts. Cortex's only job is the phrasing, and a zero-temperature model phrases every repo identically: the same cadence, the same safe adjective, the same card. Restraint in tone is a voice rule, not a sampling parameter. Every fact is pinned before the call and re-verified after it, so the only thing warmth can move is the writing — which is the part that has to be worth sharing.
+**Temperature stays at 0.4.** Determinism is the detector's job. At 0 every repo gets the same phrasing.
 
 The response schema constrains exactly nine keys:
 
@@ -384,15 +382,6 @@ Cortex writes the words the reader hears in the author's voice. The renderer com
 Times are read against the commit's **own UTC offset**, never the server's zone. The 3:53am ending is the product; a timezone conversion would move it.
 
 Plot annotation pinning: the renderer matches `FACTS.firstCommitAt`, top-level `pivotAt`, and `FACTS.lastCommitAt` against `plot[].t` (exact `TO_VARCHAR(AUTHORED_AT)` string) to find the dots those anchors ride.
-
-## Why it wins "Best use of Snowflake"
-
-- Snowflake **reaches out and gets its own data** — external access integration, no ingestion service.
-- Plain SQL — window functions, gaps, streaks, histograms — **finds the story**. The warehouse is the editor, not a bucket the LLM reads from.
-- Cortex narrates the one thread and picks the palette — and its output is verified in SQL before it is trusted.
-- Cheap by construction: detection costs nothing; the LLM sees at most 140 lines, not twenty thousand commits.
-
-Show the SQL in the writeup. Do not bury the expensive toy after buying it.
 
 ## Cost and abuse controls
 

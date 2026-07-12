@@ -11,12 +11,17 @@
 
 set -euo pipefail
 
-# Sourced here, not by the caller, so the script behaves the same run bare or run by make.
+# Read here rather than in the caller, so the script behaves the same run bare or run by
+# make. Named keys only — sourcing .env would pull SNOWFLAKE_PAT and GITHUB_TOKEN into the
+# environment of a process that shells out to gcloud, which is exactly what Secret Manager
+# exists to prevent. An already-exported value wins, so CI can override with no file present.
+CONFIG_KEYS=(SNOWFLAKE_ACCOUNT SNOWFLAKE_USER CARD_BUCKET PUBLIC_ORIGIN)
 if [[ -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
+  for key in "${CONFIG_KEYS[@]}"; do
+    [[ -n ${!key:-} ]] && continue
+    value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2-)"
+    [[ -n ${value} ]] && export "${key}=${value}"
+  done
 fi
 
 PROJECT="${PROJECT:-anchildress1}"

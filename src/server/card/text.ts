@@ -144,7 +144,7 @@ function widest(lines: LaidOutLine[], fontSize: number): number {
  */
 export function wrapHeadline(
   runs: Run[],
-  { maxWidth, hardMax, maxLines = 3, sizes = [52, 46, 40, 34, 28] }: WrapOptions,
+  { maxWidth, hardMax, maxLines = 3, sizes = [52, 46, 40, 34, 28, 24, 20] }: WrapOptions,
 ): WrappedHeadline {
   const words = tokenize(runs);
 
@@ -155,6 +155,10 @@ export function wrapHeadline(
     }
   }
 
-  const fontSize = sizes[sizes.length - 1] ?? 28;
+  // Unreachable for anything Cortex is allowed to return: the smallest size fits the
+  // longest legal headline in three lines with room to spare, which `wraps every legal
+  // headline without dropping a word` pins down. Past that, bound the block rather than
+  // let it fall through the scatter.
+  const fontSize = sizes[sizes.length - 1] ?? 20;
   return { lines: wrapAt(words, fontSize, maxWidth).slice(0, maxLines), fontSize };
 }

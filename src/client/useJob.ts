@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RepoSlug } from '../shared/slug.js';
 import { QuotaExceededError, fetchState, requestGeneration, type JobState } from './api.js';
 
@@ -9,6 +9,8 @@ const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 export interface Job {
   state: JobState | null;
   error: string | null;
+  /** Ask for another generation. Only meaningful on a failure the server will re-run. */
+  retry: () => void;
 }
 
 /** What the hook holds, tagged with the repo it belongs to. */
@@ -38,6 +40,16 @@ const settled = (state: JobState): boolean => state.status === 'ready' || state.
  */
 export function useJob(slug: RepoSlug | null): Job {
   const [tracked, setTracked] = useState<Tracked>(EMPTY);
+  /** Bumped by retry(). Re-runs the effect for a slug the hook is already attached to. */
+  const [attempt, setAttempt] = useState(0);
+  const forced = useRef(false);
+
+  const retry = useCallback(() => {
+    // A cached failure is settled, so the normal attach would just show it again. This says
+    // "ask anyway" — the server still decides whether the failure is one it will re-run.
+    forced.current = true;
+    setAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     if (!slug) return;
@@ -46,12 +58,15 @@ export function useJob(slug: RepoSlug | null): Job {
     // and every later guard then reads as dead code, even though cleanup does flip it.
     const live = { current: true };
     const alive = (): boolean => live.current;
+    const force = forced.current;
+    forced.current = false;
+
     let timer: ReturnType<typeof setTimeout> | undefined;
     const startedAt = Date.now();
 
     const publish = (next: Omit<Tracked, 'forSlug'>): void => {
-      // Late responses from a repo the user already navigated away from are dropped:
-      // the state carries the slug it describes, so it can never paint the wrong card.
+      // Late responses from a repo the user already navigated away from are dropped: the
+      // state carries the slug it describes, so it can never paint the wrong card.
       if (alive()) setTracked({ forSlug: slug.slug, ...next });
     };
 
@@ -82,7 +97,7 @@ export function useJob(slug: RepoSlug | null): Job {
         const existing = await fetchState(slug);
         if (!alive()) return;
 
-        if (settled(existing)) {
+        if (settled(existing) && !force) {
           publish({ state: existing, error: null });
           return;
         }
@@ -91,6 +106,11 @@ export function useJob(slug: RepoSlug | null): Job {
         if (!alive()) return;
 
         publish({ state: started, error: null });
+
+        // The server refuses a retry it considers terminal, and answers with the failure it
+        // already had. Polling that would spin forever on a state that will never move.
+        if (settled(started)) return;
+
         timer = setTimeout(() => void poll(), POLL_MS);
       } catch (cause) {
         publish({ state: null, error: describe(cause) });
@@ -103,10 +123,10 @@ export function useJob(slug: RepoSlug | null): Job {
       live.current = false;
       if (timer) clearTimeout(timer);
     };
-  }, [slug]);
+  }, [slug, attempt]);
 
-  // Derived, not reset in an effect: a slug change blanks the view on the same render
-  // that requests the new one, with no flash of the previous repo's card.
+  // Derived, not reset in an effect: a slug change blanks the view on the same render that
+  // requests the new one, with no flash of the previous repo's card.
   const current = tracked.forSlug === (slug?.slug ?? null) ? tracked : EMPTY;
-  return { state: current.state, error: current.error };
+  return { state: current.state, error: current.error, retry };
 }

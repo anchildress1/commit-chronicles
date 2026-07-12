@@ -3,6 +3,7 @@ import type { SnowflakeClient } from './snowflake.js';
 import type { Config } from './config.js';
 import type { TaskQueue } from './queue.js';
 import type { RepoSlug } from '../shared/slug.js';
+import { isRetryable } from '../shared/errors.js';
 import { renderCard } from './card/svg.js';
 import { isCardPayload } from './card/types.js';
 
@@ -83,7 +84,7 @@ export function createGenerator(deps: GeneratorDeps): Generator {
         return { accepted: false, reason: 'already_ready', state };
       }
 
-      if (state.status === 'failed') {
+      if (state.status === 'failed' && !isRetryable(state.errorCode)) {
         return { accepted: false, reason: 'already_failed', state };
       }
 

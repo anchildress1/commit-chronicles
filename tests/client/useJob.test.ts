@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useJob } from '../../src/client/useJob.js';
 import { parseSlug } from '../../src/shared/slug.js';
 
@@ -137,6 +137,83 @@ describe('useJob', () => {
     await waitFor(() => {
       expect(result.current.error).toMatch(/could not be reached/);
     });
+  });
+
+  it('does not re-run a cached failure on its own', async () => {
+    const calls = router({
+      state: () => ({ status: 'failed', repo: 'atlas/pipeline', errorCode: 'cortex_rejected' }),
+    });
+
+    const { result } = renderHook(() => useJob(SLUG));
+
+    await waitFor(() => {
+      expect(result.current.state?.status).toBe('failed');
+    });
+    // Landing on a failed page must not spend a Cortex call. Only the reader asks.
+    expect(calls.some((call) => call.method === 'POST')).toBe(false);
+  });
+
+  it('retry() actually asks for another generation', async () => {
+    let generated = false;
+    const calls = router({
+      state: () =>
+        generated
+          ? { status: 'ready', repo: 'atlas/pipeline' }
+          : { status: 'failed', repo: 'atlas/pipeline', errorCode: 'cortex_rejected' },
+      generate: () => {
+        generated = true;
+        return { status: 202, body: { status: 'generating', repo: 'atlas/pipeline' } };
+      },
+    });
+
+    const { result } = renderHook(() => useJob(SLUG));
+    await waitFor(() => {
+      expect(result.current.state?.status).toBe('failed');
+    });
+
+    act(() => {
+      result.current.retry();
+    });
+
+    await waitFor(() => {
+      expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+    });
+
+    // The retry polls on the same cadence as a first read.
+    await vi.advanceTimersByTimeAsync(6000);
+
+    await waitFor(() => {
+      expect(result.current.state?.status).toBe('ready');
+    });
+  });
+
+  it('does not spin when the server refuses the retry', async () => {
+    // A terminal failure comes straight back from POST. Polling it would never settle.
+    const calls = router({
+      state: () => ({ status: 'failed', repo: 'atlas/pipeline', errorCode: 'repo_not_found' }),
+      generate: () => ({
+        status: 200,
+        body: { status: 'failed', repo: 'atlas/pipeline', errorCode: 'repo_not_found' },
+      }),
+    });
+
+    const { result } = renderHook(() => useJob(SLUG));
+    await waitFor(() => {
+      expect(result.current.state?.status).toBe('failed');
+    });
+
+    act(() => {
+      result.current.retry();
+    });
+
+    await waitFor(() => {
+      expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1);
+    });
+
+    const before = calls.length;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.length).toBe(before);
+    expect(result.current.state?.status).toBe('failed');
   });
 
   it('stops polling once the component unmounts', async () => {

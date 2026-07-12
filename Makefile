@@ -44,12 +44,16 @@ secret-scan: ## Scan the working tree for secrets
 
 ai-checks: format-check lint typecheck test build ## The full gate an agent must pass before handing work back
 
+# There is no default `snow` connection on this machine, so the connection is named.
+# The key is passphrase-protected: export PRIVATE_KEY_PASSPHRASE before running.
+SNOW ?= snow sql -c chronicles
+
 snowflake-deploy: ## Deploy every warehouse object, in dependency order
-	snow sql -f snowflake/schema.sql
-	snow sql -f snowflake/ingest_pipeline.sql
-	snow sql -f snowflake/detector.sql
-	snow sql -f snowflake/ai_functions.sql
-	snow sql -f snowflake/read_repo.sql
+	$(SNOW) -f snowflake/schema.sql
+	$(SNOW) -f snowflake/ingest_pipeline.sql
+	$(SNOW) -f snowflake/detector.sql
+	$(SNOW) -f snowflake/ai_functions.sql
+	$(SNOW) -f snowflake/read_repo.sql
 
 gcp-bootstrap: ## Create the GCP resources deploy.sh expects (idempotent, one-off)
 	./scripts/gcp-bootstrap.sh

@@ -19,7 +19,7 @@ function slugFromPath(pathname: string): RepoSlug | null {
 
 export function App(): JSX.Element {
   const [slug, setSlug] = useState<RepoSlug | null>(() => slugFromPath(window.location.pathname));
-  const { state, error } = useJob(slug);
+  const { state, error, retry } = useJob(slug);
 
   // The URL is the address of a story, so back and forward have to work: the route is
   // the state, not a step in a wizard.
@@ -40,7 +40,7 @@ export function App(): JSX.Element {
 
   const screen = useMemo(() => {
     if (!slug) return <Landing onSubmit={navigate} />;
-    if (error) return <Failed slug={slug} reason={error} onSubmit={navigate} />;
+    if (error) return <Failed slug={slug} reason={error} onSubmit={navigate} onRetry={retry} />;
     if (state?.status === 'ready')
       return (
         <Result
@@ -51,10 +51,10 @@ export function App(): JSX.Element {
         />
       );
     if (state?.status === 'failed') {
-      return <Failed slug={slug} errorCode={state.errorCode} onSubmit={navigate} />;
+      return <Failed slug={slug} errorCode={state.errorCode} onSubmit={navigate} onRetry={retry} />;
     }
     return <Loading slug={slug} />;
-  }, [slug, state, error, navigate]);
+  }, [slug, state, error, navigate, retry]);
 
   // The shell keeps the brand colour. Cortex's accent is a reading of one repo's history,
   // so it belongs on that repo's card and nowhere else — the card is an SVG that already

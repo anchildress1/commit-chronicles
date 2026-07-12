@@ -127,6 +127,31 @@ describe('wrapHeadline', () => {
     expect(widestLine(wrapped.lines, wrapped.fontSize)).toBeLessThanOrEqual(COLUMN.hardMax);
   });
 
+  it('wraps every legal headline without dropping a word', () => {
+    // The caps READ_REPO enforces: upright 60 + accent 60 + trail 5. If the renderer cannot
+    // hold what the guard lets through, a card prints half a sentence and looks deliberate.
+    const word = (n: number): string => {
+      const out: string[] = [];
+      while (out.join(' ').length < n) out.push('abcde');
+      return out.join(' ').slice(0, n).trim();
+    };
+
+    const runs: Run[] = [
+      { text: word(60), italic: false },
+      { text: word(60), italic: true },
+      { text: '.', italic: false },
+    ];
+
+    const wrapped = wrapHeadline(runs, COLUMN);
+    const rendered = wrapped.lines.map(lineText).join(' ');
+
+    const expected = `${word(60)} ${word(60)}`.split(/\s+/).filter(Boolean);
+    const actual = rendered.replace(/\./g, '').split(/\s+/).filter(Boolean);
+
+    expect(actual).toEqual(expected);
+    expect(wrapped.lines.length).toBeLessThanOrEqual(3);
+  });
+
   it('never emits more lines than the cap, even at the smallest size', () => {
     const absurd: Run[] = [{ text: 'word '.repeat(200), italic: false }];
     expect(wrapHeadline(absurd, COLUMN).lines.length).toBe(3);

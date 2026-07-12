@@ -1,10 +1,12 @@
 import type { JSX } from 'react';
 import type { RepoSlug } from '../../shared/slug.js';
+import { isRetryable } from '../../shared/errors.js';
 import { RepoEntry } from './RepoEntry.js';
 
 interface FailedProps {
   slug: RepoSlug;
   onSubmit: (slug: RepoSlug) => void;
+  onRetry: () => void;
   errorCode?: string | undefined;
   reason?: string | undefined;
 }
@@ -33,18 +35,23 @@ const EXPLAIN: Record<string, string> = {
     'The commit history is past the cap this service will ingest. Try a smaller repository.',
   no_commits:
     'Every commit in that repository is a merge or a bot. There is no human history to read.',
-  cortex_empty: 'Cortex returned nothing usable. This is on us — try again.',
-  cortex_rejected: 'Cortex returned a card that failed validation. This is on us — try again.',
-  pipeline_error: 'The generation pipeline failed. This is on us — try again.',
+  cortex_empty: 'Cortex returned nothing usable. This is on us — the next reading may land.',
+  cortex_rejected:
+    'Cortex wrote a card that would not fit the frame, so we threw it away rather than print a broken one. It writes a fresh one every time, so reading again usually works.',
+  pipeline_error: 'The generation pipeline fell over. This is on us — reading again may work.',
 };
 
 const FALLBACK_HEADLINE = 'Nothing to read here.';
 const FALLBACK_EXPLAIN =
   'That repository could not be read. Check the owner and name and try again.';
 
-export function Failed({ slug, onSubmit, errorCode, reason }: FailedProps): JSX.Element {
+export function Failed({ slug, onSubmit, onRetry, errorCode, reason }: FailedProps): JSX.Element {
   const headline = (errorCode && HEADLINE[errorCode]) ?? FALLBACK_HEADLINE;
   const explain = reason ?? (errorCode && EXPLAIN[errorCode]) ?? FALLBACK_EXPLAIN;
+
+  // Only offer a retry the server will actually honour. A button that re-shows the same
+  // cached failure is worse than no button.
+  const canRetry = isRetryable(errorCode);
 
   return (
     <main className="stage">
@@ -60,8 +67,17 @@ export function Failed({ slug, onSubmit, errorCode, reason }: FailedProps): JSX.
         {explain}
       </p>
 
+      {canRetry ? (
+        <div className="retry">
+          <button type="button" className="btn-primary btn-block" onClick={onRetry}>
+            Read it again
+          </button>
+          <p className="retry__note">or read a different repository</p>
+        </div>
+      ) : null}
+
       <div className="entry" style={{ maxWidth: 520 }}>
-        <RepoEntry onSubmit={onSubmit} submitLabel="Try again" />
+        <RepoEntry onSubmit={onSubmit} submitLabel={canRetry ? 'Read' : 'Try again'} />
       </div>
     </main>
   );

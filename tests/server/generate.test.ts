@@ -102,6 +102,63 @@ describe('start', () => {
     expect(queue.enqueued).toHaveLength(1);
   });
 
+  it.each(['repo_not_found', 'repo_private', 'repo_empty', 'repo_too_large', 'no_commits'])(
+    'never re-runs a %s failure — the answer cannot change',
+    async (errorCode) => {
+      const { generator, store, queue, snowflake } = harness(() => CARD);
+      store.states.set('atlas/pipeline', {
+        status: 'failed',
+        repo: 'atlas/pipeline',
+        errorCode,
+        failedAt: new Date().toISOString(),
+      });
+
+      const outcome = await generator.start(SLUG);
+
+      expect(outcome).toMatchObject({ accepted: false, reason: 'already_failed' });
+      expect(queue.enqueued).toHaveLength(0);
+      expect(snowflake.calls).toHaveLength(0);
+      expect(store.quotaUsed).toBe(0);
+    },
+  );
+
+  it.each(['cortex_rejected', 'cortex_empty', 'pipeline_error'])(
+    're-runs a %s failure — that one is ours, and the next draft can pass',
+    async (errorCode) => {
+      const { generator, store, queue } = harness(() => CARD);
+      store.states.set('atlas/pipeline', {
+        status: 'failed',
+        repo: 'atlas/pipeline',
+        errorCode,
+        failedAt: new Date().toISOString(),
+      });
+
+      const outcome = await generator.start(SLUG);
+
+      expect(outcome.accepted).toBe(true);
+      expect(queue.enqueued).toHaveLength(1);
+
+      await queue.deliver();
+      expect(store.cards.has('atlas/pipeline')).toBe(true);
+    },
+  );
+
+  it('a retry still costs a slot from the daily cap', async () => {
+    const { generator, store } = harness(() => CARD, { dailyGenerationCap: 1 });
+    store.states.set('atlas/pipeline', {
+      status: 'failed',
+      repo: 'atlas/pipeline',
+      errorCode: 'cortex_rejected',
+      failedAt: new Date().toISOString(),
+    });
+
+    await generator.start(SLUG);
+    const second = await generator.start(parseSlug('nyx/render-core'));
+
+    expect(store.quotaUsed).toBe(1);
+    expect(second).toMatchObject({ accepted: false, reason: 'quota_exceeded' });
+  });
+
   it('refuses a repo whose failure is already cached', async () => {
     const { generator, store, queue, snowflake } = harness(() => ({
       status: 'failed' as const,

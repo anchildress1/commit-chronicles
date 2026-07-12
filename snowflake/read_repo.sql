@@ -233,12 +233,19 @@ BEGIN
     -- misbehaved badly enough that the card would misrender or lie: bad hex, over-
     -- length text that would break the frame, facts leaking into the poetic tails,
     -- kicker echoing the storyline keyword.
+    --
+    -- The headline caps are a backstop, not a layout rule: the renderer measures the text
+    -- and shrinks the type to fit, so a sentence one character over the prompt's guidance
+    -- costs nothing. They exist only to keep the combined headline inside what three lines
+    -- can hold without dropping a word. The prompt still asks for shorter than this — a
+    -- draft that runs long is a near miss, and throwing the whole card away over one was
+    -- condemning good repositories to a permanent failure.
     SELECT ARRAY_COMPACT(ARRAY_CONSTRUCT(
         IFF(NOT REGEXP_LIKE(:card:ai:accent::STRING, '^#[0-9a-fA-F]{6}$'),
             'accent_hex_invalid', NULL),
         IFF(LENGTH(:card:ai:kicker::STRING)           > 40, 'kicker_too_long',           NULL),
-        IFF(LENGTH(:card:ai:headline_upright::STRING) > 45, 'headline_upright_too_long', NULL),
-        IFF(LENGTH(:card:ai:headline_accent::STRING)  > 55, 'headline_accent_too_long',  NULL),
+        IFF(LENGTH(:card:ai:headline_upright::STRING) > 60, 'headline_upright_too_long', NULL),
+        IFF(LENGTH(:card:ai:headline_accent::STRING)  > 60, 'headline_accent_too_long',  NULL),
         IFF(LENGTH(:card:ai:headline_trail::STRING)   > 5,  'headline_trail_too_long',   NULL),
         IFF(LENGTH(:card:ai:label_first::STRING)      > 30, 'label_first_too_long',      NULL),
         IFF(LENGTH(:card:ai:label_pivot::STRING)      > 30, 'label_pivot_too_long',      NULL),

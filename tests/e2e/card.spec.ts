@@ -153,3 +153,29 @@ test('a spent budget is stated plainly rather than spinning', async ({ page }) =
 
   await expect(page.getByRole('alert')).toContainText('generation budget');
 });
+
+test('reduced motion keeps the landing and loading screens static and readable', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await stubApi(page, {});
+  await page.goto('/');
+
+  for (const element of await page.locator('[data-anim]').all()) {
+    await expect(element).toHaveCSS('animation-name', 'none');
+    await expect(element).toHaveCSS('opacity', '1');
+  }
+  for (const element of await page.locator('.btn-primary, .chip, .footer__social').all()) {
+    await expect(element).toHaveCSS('transition-duration', '0s');
+  }
+
+  await page.getByLabel('GitHub repository, as owner/repo').fill('atlas/pipeline');
+  await page.getByRole('button', { name: 'Read →' }).click();
+  await expect(page.getByRole('heading', { level: 2 })).toContainText('Cortex is reading');
+  await expect(page.locator('.scan__beam')).toBeVisible();
+  for (const element of await page.locator('.scan__beam, .scan__dot, .ticker__caret').all()) {
+    await expect(element).toHaveCSS('animation-name', 'none');
+    await expect(element).toHaveCSS('opacity', '1');
+  }
+  await expect(page.locator('.scan__dot').first()).toHaveCSS('transform', 'none');
+});

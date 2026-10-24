@@ -534,13 +534,26 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-    opacity: 1 !important;
-    transform: none !important;
+  [data-anim],
+  .scan__beam,
+  .scan__dot,
+  .ticker__caret {
+    animation: none;
+  }
+
+  [data-anim] {
+    opacity: 1;
+  }
+
+  .scan__dot {
+    transform: none;
+  }
+
+  .btn-primary,
+  .chip,
+  .btn-ghost,
+  .btn-quiet {
+    transition: none;
   }
 }
 

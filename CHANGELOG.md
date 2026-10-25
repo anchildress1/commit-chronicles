@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/anchildress1/commit-chronicles/compare/v1.0.0...v1.0.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* preserve reduced motion with targeted CSS rules ([#60](https://github.com/anchildress1/commit-chronicles/issues/60)) ([45e1e1c](https://github.com/anchildress1/commit-chronicles/commit/45e1e1c31beba621d0d2402a243d1fc7987ff9db))
+
 ## 1.0.0 (2026-07-12)
 
 

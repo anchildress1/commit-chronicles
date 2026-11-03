@@ -30,10 +30,16 @@ const generator = createGenerator({
 const requested = process.argv.slice(2);
 const targets = requested.length > 0 ? requested.map(parseSlug) : await snowflake.listCards();
 
+// Produce each redraw lazily: even repeated slugs must finish publishing before the next starts.
+async function* redraws() {
+  for (const target of targets) {
+    const slug = parseSlug(`${target.owner}/${target.repo}`);
+    yield generator.rerender(slug).then((ok) => ({ slug, ok }));
+  }
+}
+
 let redrawn = 0;
-for (const target of targets) {
-  const slug = parseSlug(`${target.owner}/${target.repo}`);
-  const ok = await generator.rerender(slug);
+for await (const { slug, ok } of redraws()) {
   if (ok) redrawn += 1;
   else log('no card to redraw', { repo: slug.slug });
 }

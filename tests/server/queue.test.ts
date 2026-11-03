@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Config } from '../../src/server/config.js';
 import { createCloudTasksQueue, TaskNotCreatedError } from '../../src/server/queue.js';
 import { parseSlug } from '../../src/shared/slug.js';
@@ -148,6 +148,69 @@ describe('createCloudTasksQueue', () => {
     expect(ticks.delays).toEqual([250, 500]);
   });
 
+  it('does not start the next create until its backoff completes', async () => {
+    let release!: () => void;
+    const backoff = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sleep = vi.fn(() => backoff);
+    const fake = client([new RpcError(14), undefined]);
+    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', sleep);
+
+    const admission = queue.enqueue(parseSlug('atlas/pipeline'));
+    await expect.poll(() => sleep.mock.calls.length).toBe(1);
+    expect(fake.created).toHaveLength(1);
+    expect(sleep).toHaveBeenCalledWith(250);
+
+    release();
+    await expect(admission).resolves.toBeUndefined();
+    expect(fake.created).toHaveLength(2);
+    expect(fake.created[1]).toBe(fake.created[0]);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([6, 409])('stops retrying after status %s proves the task exists', async (status) => {
+    const ticks = clock();
+    const fake = client([new RpcError(14), new RpcError(status)]);
+    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', ticks.sleep);
+
+    await expect(queue.enqueue(parseSlug('atlas/pipeline'))).resolves.toBeUndefined();
+
+    expect(fake.created).toHaveLength(2);
+    expect(ticks.delays).toEqual([250]);
+  });
+
+  it.each([3, 5, 7, 9, 16, 400, 401, 403, 404, 412])(
+    'stops retrying after status %s definitively refuses a later attempt',
+    async (status) => {
+      const refusal = new RpcError(status);
+      const ticks = clock();
+      const fake = client([new RpcError(14), refusal]);
+      const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', ticks.sleep);
+
+      await expect(queue.enqueue(parseSlug('atlas/pipeline'))).rejects.toMatchObject({
+        name: 'TaskNotCreatedError',
+        cause: refusal,
+      });
+      expect(fake.created).toHaveLength(2);
+      expect(ticks.delays).toEqual([250]);
+    },
+  );
+
+  it('propagates a backoff failure without creating another task', async () => {
+    const failure = new Error('backoff failed');
+    const fake = client([new RpcError(14)]);
+    const queue = createCloudTasksQueue(
+      CONFIG,
+      fake as never,
+      () => 'job-id',
+      () => Promise.reject(failure),
+    );
+
+    await expect(queue.enqueue(parseSlug('atlas/pipeline'))).rejects.toBe(failure);
+    expect(fake.created).toHaveLength(1);
+  });
+
   it('reports a definitive create refusal so admission can be rolled back', async () => {
     const queue = createCloudTasksQueue(
       CONFIG,
@@ -162,11 +225,14 @@ describe('createCloudTasksQueue', () => {
   });
 
   it('surfaces an ambiguous failure after three idempotent attempts', async () => {
-    const fake = client([new RpcError(14), new RpcError(14), new RpcError(14)]);
-    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', clock().sleep);
+    const failure = new RpcError(14);
+    const fake = client([new RpcError(14), new RpcError(14), failure]);
+    const ticks = clock();
+    const queue = createCloudTasksQueue(CONFIG, fake as never, () => 'job-id', ticks.sleep);
 
-    await expect(queue.enqueue(parseSlug('atlas/pipeline'))).rejects.toThrow('rpc 14');
+    await expect(queue.enqueue(parseSlug('atlas/pipeline'))).rejects.toBe(failure);
     expect(fake.created).toHaveLength(3);
+    expect(ticks.delays).toEqual([250, 500]);
     expect(new Set(fake.created.map((request) => request.task.name))).toEqual(
       new Set(['queues/queue/tasks/job-id']),
     );

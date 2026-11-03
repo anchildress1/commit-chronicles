@@ -81,7 +81,7 @@ export function createCloudTasksQueue(
         },
       };
 
-      for (let attempt = 0; attempt < CREATE_ATTEMPTS; attempt += 1) {
+      const submit = async (attempt: number): Promise<void> => {
         try {
           await client.createTask(request);
           return;
@@ -96,8 +96,11 @@ export function createCloudTasksQueue(
           // The task name makes retries idempotent: a committed first attempt answers
           // ALREADY_EXISTS instead of creating duplicate paid work.
           await sleep(BACKOFF_MS * 2 ** attempt);
+          return submit(attempt + 1);
         }
-      }
+      };
+
+      return submit(0);
     },
   };
 }
